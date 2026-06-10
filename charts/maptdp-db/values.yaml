@@ -1,0 +1,33 @@
+postgres:
+  passwordSecretName: "maptdp-db-auth"
+persistence:
+  enabled: true
+  accessModes: ["ReadWriteOnce"]
+  size: 5Gi
+  storageClass: "" # laisse vide pour default; sinon mets celle de ton cluster
+service:
+  type: ClusterIP
+  port: 5432
+  annotations: {}
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 1Gi
+networkPolicy:
+  enabled: true
+  # Autorise seulement le backend dans le même namespace maptdp (ou adapte les sélecteurs)
+  allowFromNamespaces:
+  - maptdp
+  allowFromPodSelectors:
+  - matchLabels:
+      app.kubernetes.io/component: backend
+# Si ton registre est privé
+imagePullSecrets: []
+db:
+  image:
+    tag: "16.21"
+    repository: docker.io/jaffleman971/maptdp-db
+    pullPolicy: IfNotPresent

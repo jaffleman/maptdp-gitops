@@ -1,0 +1,21 @@
+apiVersion: argocd-image-updater.argoproj.io/v1alpha1
+kind: ImageUpdater
+metadata:
+  labels:
+    argocd.argoproj.io/instance: step2-apps
+  name: maptdp-back-dev
+  namespace: argocd
+spec:
+  # 1. Changed back to namePattern to satisfy your cluster's CRD requirements
+  applicationRefs:
+    - namePattern: maptdp-back-dev
+
+  # 2. Keep images separated here at the root level of spec
+  images:
+    - name: docker.io/jaffleman971/maptdp-backend
+      alias: backend
+      updateStrategy: newest-build
+      commonUpdateSettings:
+        ignoreTags:
+          - latest
+      pullSecret: secret:argocd/dockerhub-creds

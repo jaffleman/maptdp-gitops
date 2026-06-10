@@ -1,0 +1,7 @@
+Connexion:
+  Service DNS: {{ include "maptdp-db.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local
+  Port: {{ .Values.service.port }}
+  Base: maptdpbdd (créée par le script de dump)
+
+Exemple de DATABASE_URL (backend):
+  postgres://extjaff:<password>@{{ include "maptdp-db.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.service.port }}/maptdpbdd

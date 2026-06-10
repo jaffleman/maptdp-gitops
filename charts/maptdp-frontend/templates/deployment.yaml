@@ -1,0 +1,62 @@
+{{- if .Values.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "frontend.fullname" . }}-deploy
+  labels:
+    {{- include "frontend.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: frontend
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: frontend
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        {{- include "frontend.labels" . | nindent 8 }}
+    spec:
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: frontend
+          image: "{{ .Values.frontend.image.repository }}:{{ .Values.frontend.image.tag }}"
+          imagePullPolicy: {{ .Values.frontend.image.pullPolicy }}
+          env:
+            - name: REACT_APP_URL
+              value: {{ .Values.runtimeConfig.apiBaseUrl | quote }}
+          ports:
+            - name: http
+              containerPort: 80
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            httpGet: { path: /healthz, port: http }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: envjs
+              mountPath: /usr/share/nginx/html/env.js
+              subPath: env.js
+      volumes:
+        - name: envjs
+          configMap:
+            name: {{ include "frontend.fullname" . }}-env
+            items:
+              - key: env.js
+                path: env.js
+      nodeSelector:
+        {{- toYaml .Values.nodeSelector | nindent 8 }}
+      affinity:
+        {{- toYaml .Values.affinity | nindent 8 }}
+      tolerations:
+        {{- toYaml .Values.tolerations | nindent 8 }}
+{{- end }}

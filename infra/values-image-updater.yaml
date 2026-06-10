@@ -1,0 +1,14 @@
+config:
+  writeBackMethod: git
+  git:
+    branch: main
+    commitMessageTemplate: 'chore(image-updater): bump {{ .AppName }} to {{ .NewTag }}'
+registries:
+  - name: Docker Hub
+    prefix: docker.io
+    api_url: https://registry-1.docker.io
+    ping: true
+    credentials:
+      name: dockerhub-cred
+      namespace: argocd
+      type: docker

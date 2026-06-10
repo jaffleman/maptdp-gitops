@@ -1,0 +1,25 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "backend.fullname" . }}-ingress
+  namespace: maptdp
+  annotations:
+    kubernetes.io/ingress.class: traefik
+    cert-manager.io/cluster-issuer: letsencrypt-staging
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - {{ .Values.ingress.host }}
+      secretName:  {{ include "backend.fullname" . }}-tls
+  rules:
+    - host: {{ .Values.ingress.host }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "backend.fullname" . }}-srv
+                port:
+                  number: {{ .Values.service.port }}

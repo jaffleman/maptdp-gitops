@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "maptdp-db.fullname" . }}
+  labels:
+    app.kubernetes.io/name: {{ include "maptdp-db.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  annotations:
+    {{- toYaml .Values.service.annotations | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  selector:
+    app.kubernetes.io/name: {{ include "maptdp-db.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  ports:
+    - name: postgres
+      port: {{ .Values.service.port }}
+      targetPort: 5432

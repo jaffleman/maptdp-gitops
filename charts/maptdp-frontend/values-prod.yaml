@@ -1,0 +1,9 @@
+ingress:
+  host: "tdp.jaffleman.tech"
+runtimeConfig:
+  apiBaseUrl: "https://api.jaffleman.tech"
+replicaCount: 1
+frontend:
+  image:
+    tag: sha-e64e23e
+    repository: docker.io/jaffleman971/maptdp-frontend

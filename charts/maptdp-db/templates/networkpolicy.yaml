@@ -1,0 +1,37 @@
+{{- if .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "maptdp-db.fullname" . }}-allow-backend
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "maptdp-db.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  policyTypes: ["Ingress", "Egress"]
+  ingress:
+    - from:
+        {{- range .Values.networkPolicy.allowFromNamespaces }}
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ . | quote }}
+        {{- end }}
+        {{- range .Values.networkPolicy.allowFromPodSelectors }}
+        - podSelector:
+            {{- toYaml . | nindent 12 }}
+        {{- end }}
+      ports:
+        - protocol: TCP
+          port: 5432
+  egress:
+    # DNS
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+{{- end }}

@@ -1,0 +1,14 @@
+replicaCount: 1
+ingress:
+  host: "api.dev.jaffleman.tech"
+env:
+- name: PORT
+  value: 80
+- name: NODE_ENV
+  value: "development"
+- name: LOG_LEVEL
+  value: "debug"
+backend:
+  image:
+    tag: sha-34d6073
+    repository: docker.io/jaffleman971/maptdp-backend

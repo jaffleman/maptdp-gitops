@@ -1,0 +1,87 @@
+{{- if .Values.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "backend.fullname" . }}-backend-deny-all-except-allowed
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "backend.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: backend
+      app.kubernetes.io/instance: {{ .Release.Name }}
+
+  policyTypes:
+    - Ingress
+    - Egress
+
+  ingress:
+
+    # 1. Autoriser Traefik → Backend
+    - from:
+
+
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: traefik
+
+      ports:
+        - protocol: TCP
+          port: {{ .Values.service.port }}
+
+    # 2. Autoriser Frontend → Backend (PROXY_PASS depuis Nginx)
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Release.Namespace }}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/component: frontend
+              app.kubernetes.io/instance: {{ .Release.Name }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.service.port }}
+
+    # 3. Autoriser kube-dns pour la résolution DNS interne
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+
+  egress:
+
+    # 1. DNS sortant (nécessaire pour résoudre le Service Postgres)
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+
+    # 2. Backend → Base de données PostgreSQL
+    - to:
+      - namespaceSelector:
+          matchLabels:
+            kubernetes.io/metadata.name: maptdp
+        podSelector:
+          matchLabels:
+            app.kubernetes.io/name: maptdp-db
+      ports:
+        - protocol: TCP
+          port: 5432
+{{- end }}
