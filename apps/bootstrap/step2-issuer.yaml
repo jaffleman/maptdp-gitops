@@ -8,9 +8,9 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: 'https://github.com/jaffleman/New_MapTdp.git'
+    repoURL: 'https://github.com/jaffleman/maptdp-gitops.git'
     targetRevision: main
-    path: deploy/apps/infra/user-services
+    path: apps/infra/user-services
   destination:
     server: 'https://kubernetes.default.svc'
     namespace: bootstrap
