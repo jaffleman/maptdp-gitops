@@ -23,9 +23,9 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/jaffleman/New_MapTdp.git
+    repoURL: https://github.com/jaffleman/maptdp-database.git
     targetRevision: main
-    path: deploy/charts/maptdp-db
+    path: chart/maptdp-db
   destination:
     server: https://kubernetes.default.svc
     namespace: maptdp

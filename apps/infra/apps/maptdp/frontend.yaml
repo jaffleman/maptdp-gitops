@@ -1,7 +1,7 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: maptdp-front-dev
+  name: maptdp-frontend
   namespace: argocd
 
   annotations:
@@ -28,9 +28,9 @@ spec:
   project: default
 
   source:
-    repoURL: https://github.com/jaffleman/New_MapTdp.git
+    repoURL: https://github.com/jaffleman/maptdp-frontend.git
     targetRevision: main
-    path: deploy/charts/maptdp-frontend
+    path: chart/maptdp-frontend
     helm:
       valueFiles:
         - values.yaml
