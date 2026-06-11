@@ -1,7 +1,7 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: maptdp-frontend
+  name: maptdp-frontend-staging
   namespace: argocd
 
   annotations:

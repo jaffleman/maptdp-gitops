@@ -1,7 +1,7 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: maptdp-backend
+  name: maptdp-backend-dev
   namespace: argocd
   annotations:
     # 1. Image to monitor

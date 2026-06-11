@@ -1,7 +1,7 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: maptdp-db
+  name: maptdp-db-dev
   namespace: argocd
   annotations:
     argocd-image-updater.argoproj.io/image-list: db=docker.io/jaffleman971/maptdp-db
