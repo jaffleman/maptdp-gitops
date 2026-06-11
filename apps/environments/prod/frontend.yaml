@@ -29,7 +29,7 @@ spec:
 
   source:
     repoURL: https://github.com/jaffleman/maptdp-frontend.git
-    targetRevision: prod
+    targetRevision: main
     path: chart/maptdp-frontend
     helm:
       valueFiles:

@@ -26,7 +26,7 @@ spec:
   project: default
   source:
     repoURL: https://github.com/jaffleman/maptdp-backend.git
-    targetRevision: prod
+    targetRevision: main
     path: chart/maptdp-backend
     helm:
       valueFiles:
