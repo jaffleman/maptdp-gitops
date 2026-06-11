@@ -38,7 +38,7 @@ spec:
 
   destination:
     server: https://kubernetes.default.svc
-    namespace: maptdp -staging
+    namespace: maptdp-staging
 
   syncPolicy:
     automated:
