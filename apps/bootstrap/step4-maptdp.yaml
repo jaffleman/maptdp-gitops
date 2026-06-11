@@ -1,17 +1,17 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: maptdp-apps
+  name: step4-maptdp
   namespace: argocd
 spec:
   project: default
   source:
     repoURL: 'https://github.com/jaffleman/maptdp-gitops.git'
-    targetRevision: main
-    path: apps/infra/apps/maptdp
+    path: apps/environments/
+
   destination:
     server: 'https://kubernetes.default.svc'
-    namespace: maptdp
+    namespace: argocd
   syncPolicy:
     automated:
       prune: true
