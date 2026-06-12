@@ -1,44 +1,39 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: maptdp-backend-prod
+  name: maptdp-backend-dev
   namespace: argocd
   annotations:
-    # 1. Image to monitor
     argocd-image-updater.argoproj.io/image-list: backend=docker.io/jaffleman971/maptdp-backend
 
-    # 2. Strategy (newest-build since you are tracking SHA tags)
     argocd-image-updater.argoproj.io/backend.update-strategy: newest-build
 
-    # 3. Filter only SHA tags and ignore the 'latest' string tag
-    argocd-image-updater.argoproj.io/backend.allow-tags: regexp:^sha-[a-f0-9]{7}$
-    argocd-image-updater.argoproj.io/backend.ignore-tags: latest
+    argocd-image-updater.argoproj.io/backend.allow-tags: regexp:^dev-sha-[a-f0-9]{7}$
 
-    # 5. GitOps Write-back method
     argocd-image-updater.argoproj.io/write-back-method: git
-    argocd-image-updater.argoproj.io/git-branch: main
+    argocd-image-updater.argoproj.io/git-branch: dev
 
-    # 6. Helm mapping parameters matching your chart values
     argocd-image-updater.argoproj.io/backend.helm.image-name: backend.image.repository
     argocd-image-updater.argoproj.io/backend.helm.image-tag: backend.image.tag
 
 spec:
   project: default
+
   source:
     repoURL: https://github.com/jaffleman/maptdp-gitops.git
-    targetRevision: main
+    targetRevision: dev
     path: charts/maptdp-backend
+
     helm:
       valueFiles:
         - values.yaml
-        - values-prod.yaml
+        - values-dev.yaml
+
   destination:
     server: https://kubernetes.default.svc
-    namespace: maptdp-prod
+    namespace: maptdp-dev
+
   syncPolicy:
     automated:
       prune: true
       selfHeal: true
-    syncOptions:
-      - SkipDryRunOnMissingResource=true
-      - CreateNamespace=true
