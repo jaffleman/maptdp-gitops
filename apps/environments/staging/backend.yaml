@@ -16,7 +16,7 @@ metadata:
 
     # 5. GitOps Write-back method
     argocd-image-updater.argoproj.io/write-back-method: git
-    argocd-image-updater.argoproj.io/git-branch: main
+    argocd-image-updater.argoproj.io/git-branch: staging
 
     # 6. Helm mapping parameters matching your chart values
     argocd-image-updater.argoproj.io/backend.helm.image-name: backend.image.repository
