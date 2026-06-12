@@ -22,7 +22,7 @@ spec:
   source:
     repoURL: https://github.com/jaffleman/maptdp-gitops.git
     targetRevision: dev
-    path: charts/maptdp-backend
+    path: apps/charts/maptdp-backend
 
     helm:
       valueFiles:
