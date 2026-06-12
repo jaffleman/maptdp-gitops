@@ -1,0 +1,10 @@
+ingress:
+  enabled: true
+  host: "maptdp.dev.jaffleman.tech"
+runtimeConfig:
+  apiBaseUrl: "https://api.dev.jaffleman.tech/"
+replicaCount: 1
+frontend:
+  image:
+    tag: sha-1940bfd
+    repository: docker.io/jaffleman971/maptdp-frontend

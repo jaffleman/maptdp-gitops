@@ -1,0 +1,6 @@
+apiVersion: v2
+name: maptdp-db
+description: PostgreSQL 16 préchargé avec maptdpbdd (dump)
+type: application
+version: 0.1.0
+appVersion: "16.10"
