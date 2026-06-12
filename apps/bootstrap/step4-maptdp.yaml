@@ -7,7 +7,8 @@ spec:
   project: default
   source:
     repoURL: 'https://github.com/jaffleman/maptdp-gitops.git'
-    path: apps/environments/
+    path: apps/maptdp-apps
+    targetRevision: staging
 
   destination:
     server: 'https://kubernetes.default.svc'
