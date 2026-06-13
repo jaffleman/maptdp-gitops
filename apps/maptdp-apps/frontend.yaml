@@ -30,7 +30,7 @@ spec:
   source:
     repoURL: https://github.com/jaffleman/maptdp-gitops.git
     targetRevision: staging
-    path: charts/maptdp-frontend
+    path: apps/charts/maptdp-frontend
     helm:
       valueFiles:
         - values.yaml
