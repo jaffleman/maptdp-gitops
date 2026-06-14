@@ -2,34 +2,27 @@
 
 global:
   imagePullSecrets: []
-
 enabled: true
-
 replicaCount: 1
-
 frontend:
   image:
     repository: docker.io/jaffleman971/maptdp-frontend
-    tag: "sha-36b31c4"
+    tag: "sha-d8223e9"
     pullPolicy: IfNotPresent
-
 service:
   type: ClusterIP
   port: 80
-
 ingress:
   enabled: true
-  host: ""   # défini dans les fichiers d'environnement
+  host: "" # défini dans les fichiers d'environnement
   tls: true
   annotations:
     kubernetes.io/ingress.class: "traefik"
     traefik.ingress.kubernetes.io/router.entrypoints: "web,websecure"
     traefik.ingress.kubernetes.io/router.tls: "true"
     traefik.ingress.kubernetes.io/router.tls.certresolver: "le"
-
 runtimeConfig:
-  apiBaseUrl: ""   # défini dans les fichiers d'environnement
-
+  apiBaseUrl: "" # défini dans les fichiers d'environnement
 resources:
   requests:
     cpu: 50m
