@@ -18,7 +18,8 @@ metadata:
     argocd-image-updater.argoproj.io/git-branch: dev
 
     argocd-image-updater.argoproj.io/write-back-target: helmvalues
-    argocd-image-updater.argoproj.io/write-back-path: charts/maptdp-db/values.yaml
+    argocd-image-updater.argoproj.io/write-back-path: charts/maptdp-db
+    argocd-image-updater.argoproj.io/helm-values-file: values.yaml
 
     # --- Mapping Helm obligatoire ---
     argocd-image-updater.argoproj.io/db.helm.image-name: db.image.repository

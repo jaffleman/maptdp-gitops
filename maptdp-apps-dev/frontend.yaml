@@ -21,7 +21,8 @@ metadata:
     argocd-image-updater.argoproj.io/git-branch: dev
 
     argocd-image-updater.argoproj.io/write-back-target: helmvalues
-    argocd-image-updater.argoproj.io/write-back-path: charts/maptdp-frontend/values.yaml
+    argocd-image-updater.argoproj.io/write-back-path: charts/maptdp-frontend
+    argocd-image-updater.argoproj.io/helm-values-file: values.yaml
 
     # ✅ mapping Helm → où modifier image
     argocd-image-updater.argoproj.io/frontend.helm.image-name: frontend.image.repository
