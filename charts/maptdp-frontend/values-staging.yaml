@@ -1,0 +1,11 @@
+replicaCount: 2
+
+frontend:
+  image:
+    tag: "staging"
+
+ingress:
+  host: "maptdp.staging.jaffleman.tech"
+
+runtimeConfig:
+  apiBaseUrl: "https://api.staging.jaffleman.tech"

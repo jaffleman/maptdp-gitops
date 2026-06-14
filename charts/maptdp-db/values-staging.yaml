@@ -1,0 +1,14 @@
+db:
+  image:
+    tag: "16.21"
+
+persistence:
+  size: 10Gi
+
+resources:
+  requests:
+    cpu: 150m
+    memory: 256Mi
+  limits:
+    cpu: 600m
+    memory: 1Gi

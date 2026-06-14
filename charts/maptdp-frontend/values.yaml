@@ -1,0 +1,39 @@
+# deploy/charts/maptdp-frontend/values.yaml
+
+global:
+  imagePullSecrets: []
+
+enabled: true
+
+replicaCount: 1
+
+frontend:
+  image:
+    repository: docker.io/jaffleman971/maptdp-frontend
+    tag: ""   # défini dans les fichiers d'environnement
+    pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 80
+
+ingress:
+  enabled: true
+  host: ""   # défini dans les fichiers d'environnement
+  tls: true
+  annotations:
+    kubernetes.io/ingress.class: "traefik"
+    traefik.ingress.kubernetes.io/router.entrypoints: "web,websecure"
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    traefik.ingress.kubernetes.io/router.tls.certresolver: "le"
+
+runtimeConfig:
+  apiBaseUrl: ""   # défini dans les fichiers d'environnement
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 300m
+    memory: 256Mi

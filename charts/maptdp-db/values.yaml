@@ -1,0 +1,39 @@
+# deploy/charts/maptdp-db/values.yaml
+
+postgres:
+  passwordSecretName: "maptdp-db-auth"
+
+persistence:
+  enabled: true
+  accessModes: ["ReadWriteOnce"]
+  size: 5Gi
+  storageClass: ""   # default
+
+service:
+  type: ClusterIP
+  port: 5432
+  annotations: {}
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 1Gi
+
+networkPolicy:
+  enabled: true
+  allowFromNamespaces:
+    - maptdp
+  allowFromPodSelectors:
+    - matchLabels:
+        app.kubernetes.io/component: backend
+
+imagePullSecrets: []
+
+db:
+  image:
+    repository: docker.io/jaffleman971/maptdp-db
+    tag: ""   # défini dans les fichiers d'environnement
+    pullPolicy: IfNotPresent

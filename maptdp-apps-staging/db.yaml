@@ -1,0 +1,46 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: maptdp-db-staging
+  namespace: argocd
+  annotations:
+    # --- ArgoCD Image Updater ---
+    argocd-image-updater.argoproj.io/image-list: db=docker.io/jaffleman971/maptdp-db
+
+    # Stratégie de mise à jour
+    argocd-image-updater.argoproj.io/db.update-strategy: semver
+
+    # Autorise les tags 16.x
+    argocd-image-updater.argoproj.io/db.allow-tags: regexp:^16\.[0-9]+$
+
+    # --- GitOps ---
+    argocd-image-updater.argoproj.io/write-back-method: git
+    argocd-image-updater.argoproj.io/git-branch: staging
+
+    # --- Mapping Helm obligatoire ---
+    argocd-image-updater.argoproj.io/db.helm.image-name: db.image.repository
+    argocd-image-updater.argoproj.io/db.helm.image-tag: db.image.tag
+
+spec:
+  project: default
+
+  source:
+    repoURL: https://github.com/jaffleman/maptdp-gitops.git
+    targetRevision: staging
+    path: charts/maptdp-db
+    helm:
+      valueFiles:
+        - values.yaml
+        - values-staging.yaml
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: maptdp-staging
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - SkipDryRunOnMissingResource=true
+      - CreateNamespace=true
