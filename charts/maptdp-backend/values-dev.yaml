@@ -3,9 +3,6 @@ replicaCount: 1
 ingress:
   host: "api.dev.jaffleman.tech"
 
-backend:
-  image:
-    tag: "sha-75c23a9"
 
 env:
   - name: PORT

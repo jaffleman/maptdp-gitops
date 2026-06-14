@@ -10,7 +10,7 @@ replicaCount: 1
 frontend:
   image:
     repository: docker.io/jaffleman971/maptdp-frontend
-    tag: ""   # défini dans les fichiers d'environnement
+    tag: "sha-36b31c4"
     pullPolicy: IfNotPresent
 
 service:
