@@ -13,7 +13,7 @@ enabled: true
 backend:
   image:
     repository: docker.io/jaffleman971/maptdp-backend
-    tag: "sha-07c7014"  
+    tag: "sha-07c7013"  
     pullPolicy: IfNotPresent
 
 service:
