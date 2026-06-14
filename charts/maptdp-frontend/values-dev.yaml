@@ -1,9 +1,5 @@
 replicaCount: 1
 
-frontend:
-  image:
-    tag: "sha-caae8c7"
-
 ingress:
   host: "maptdp.dev.jaffleman.tech"
 

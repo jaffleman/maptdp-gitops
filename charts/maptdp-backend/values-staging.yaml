@@ -3,9 +3,6 @@ replicaCount: 2
 ingress:
   host: "api.staging.jaffleman.tech"
 
-backend:
-  image:
-    tag: "staging"
 
 env:
   - name: PORT
