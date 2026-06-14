@@ -1,8 +1,0 @@
-helm:
-  parameters:
-  - name: frontend.image.repository
-    value: docker.io/jaffleman971/maptdp-frontend
-    forcestring: true
-  - name: frontend.image.tag
-    value: sha-36b31c4
-    forcestring: true
