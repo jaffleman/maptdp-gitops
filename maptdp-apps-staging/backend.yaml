@@ -3,6 +3,22 @@ kind: Application
 metadata:
   name: maptdp-backend-staging
   namespace: argocd
+  annotations:
+    argocd-image-updater.argoproj.io/image-list: backend=docker.io/jaffleman971/maptdp-backend
+
+    argocd-image-updater.argoproj.io/backend.update-strategy: newest-build
+
+    argocd-image-updater.argoproj.io/backend.allow-tags: regexp:^staging-sha-[a-f0-9]{7}$
+
+    argocd-image-updater.argoproj.io/write-back-method: git
+    argocd-image-updater.argoproj.io/git-branch: staging
+
+    # argocd-image-updater.argoproj.io/write-back-target: git
+    # argocd-image-updater.argoproj.io/write-back-path: charts/maptdp-backend
+    # argocd-image-updater.argoproj.io/helm-values-file: values.yaml
+
+    argocd-image-updater.argoproj.io/backend.helm.image-name: backend.image.repository
+    argocd-image-updater.argoproj.io/backend.helm.image-tag: backend.image.tag
 
 spec:
   project: default
