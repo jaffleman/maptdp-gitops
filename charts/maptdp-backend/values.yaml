@@ -1,28 +1,21 @@
 # deploy/charts/maptdp/values.yaml
 
 replicaCount: 1
-
 ingress:
-  host: ""   # défini dans les fichiers d'environnement
-
+  host: "" # défini dans les fichiers d'environnement
 global:
   imagePullSecrets: []
-
 enabled: true
-
 backend:
   image:
     repository: docker.io/jaffleman971/maptdp-backend
-    tag: "sha-07c7014"  
+    tag: "sha-d95af5e"
     pullPolicy: IfNotPresent
-
 service:
   type: ClusterIP
   port: 80
-
-env: []       # défini dans les fichiers d'environnement
-envFrom: []   # défini dans les fichiers d'environnement
-
+env: [] # défini dans les fichiers d'environnement
+envFrom: [] # défini dans les fichiers d'environnement
 livenessProbe:
   enabled: true
   path: /healthz
@@ -30,7 +23,6 @@ livenessProbe:
   periodSeconds: 10
   timeoutSeconds: 2
   failureThreshold: 3
-
 readinessProbe:
   enabled: true
   path: /healthz
@@ -38,7 +30,6 @@ readinessProbe:
   periodSeconds: 10
   timeoutSeconds: 2
   failureThreshold: 3
-
 resources:
-  requests: { cpu: 100m, memory: 128Mi }
-  limits:   { cpu: 500m, memory: 512Mi }
+  requests: {cpu: 100m, memory: 128Mi}
+  limits: {cpu: 500m, memory: 512Mi}
