@@ -2,7 +2,7 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: {{ include "frontend.fullname" . }}-ingress
-  namespace: maptdp-dev
+  namespace: maptdp-staging
   labels:
     {{- include "frontend.labels" . | nindent 4 }}
   annotations:

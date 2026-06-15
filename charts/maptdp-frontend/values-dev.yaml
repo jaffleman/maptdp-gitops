@@ -1,7 +1,0 @@
-replicaCount: 1
-
-ingress:
-  host: "maptdp.dev.jaffleman.tech"
-
-runtimeConfig:
-  apiBaseUrl: "https://api.dev.jaffleman.tech"
