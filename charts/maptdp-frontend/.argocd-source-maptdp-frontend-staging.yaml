@@ -4,5 +4,5 @@ helm:
     value: docker.io/jaffleman971/maptdp-frontend
     forcestring: true
   - name: frontend.image.tag
-    value: staging-sha-7336236
+    value: staging-sha-92f8b1f
     forcestring: true
