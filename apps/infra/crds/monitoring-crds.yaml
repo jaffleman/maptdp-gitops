@@ -28,3 +28,4 @@ spec:
     syncOptions:
       - Replace=true
       - SkipDryRunOnMissingResource=true
+      - CreateNamespace=true
