@@ -18,7 +18,7 @@ metadata:
 
     # ✅ écriture dans Git (GitOps)
     argocd-image-updater.argoproj.io/write-back-method: git
-    argocd-image-updater.argoproj.io/git-branch: main
+    argocd-image-updater.argoproj.io/git-branch: prod
 
     # ✅ mapping Helm → où modifier image
     argocd-image-updater.argoproj.io/frontend.helm.image-name: frontend.image.repository
@@ -29,7 +29,7 @@ spec:
 
   source:
     repoURL: https://github.com/jaffleman/maptdp-frontend.git
-    targetRevision: main
+    targetRevision: prod
     path: chart/maptdp-frontend
     helm:
       valueFiles:
