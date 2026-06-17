@@ -1,0 +1,25 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: step1-crds
+  namespace: argocd
+  annotations:
+    argocd.openshift.io/sync-wave: "1"
+spec:
+  project: default
+  source:
+    repoURL: 'https://github.com/jaffleman/maptdp-gitops.git'
+    targetRevision: bootstrap-infra
+    path: apps/prod/infra/crds
+
+  destination:
+    server: 'https://kubernetes.default.svc'
+    namespace: bootstrap
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+
+    syncOptions:
+      - CreateNamespace=true

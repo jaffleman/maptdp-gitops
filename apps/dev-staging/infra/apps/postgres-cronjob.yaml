@@ -1,0 +1,65 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: postgres-backup-cronjob
+  namespace: maptdp-staging
+spec:
+  # Planification : Tous les jours à 2h00 du matin
+  schedule: "0 2 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: maptdpbdd-backup
+            # Image contenant pg_dump et aws cli (ajustez la version selon votre Postgres)
+            image: ebelgourd/postgres-aws-cli:15 
+            env:
+            # Informations de connexion à votre base locale
+            - name: PGHOST
+              value: "maptdp-db" # Le nom DNS de votre Service K8s
+            - name: PGUSER
+              value: DB_USER
+            - name: PGDATABASE
+              value: DB_NAME
+            # Récupération du mot de passe de manière sécurisée via un Secret existant
+            - name: PGPASSWORD
+              value: DB_PASSWORD
+            # Configuration du stockage distant (S3 / Object Storage)
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: s3-credentials
+                  key: access-key
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: s3-credentials
+                  key: secret-key
+            - name: AWS_DEFAULT_REGION
+              value: "fr-par" # Exemple pour Scaleway Paris
+            - name: S3_BUCKET
+              value: "s3://nom-de-votre-bucket-sauvegardes"
+            
+            # Le script exécuté au démarrage du conteneur éphémère
+            command: ["/bin/sh", "-c"]
+            args:
+              - |
+                set -e
+                DATE=$(date +%Y%m%d_%H%M%S)
+                FILENAME="backup_${PGDATABASE}_${DATE}.sql.gz"
+                
+                echo "Démarrage du dump de la base..."
+                pg_dump -h $PGHOST -U $PGUSER $PGDATABASE | gzip > /tmp/$FILENAME
+                
+                echo "Envoi du fichier vers le stockage Objet distant..."
+                # Optionnel : Ajoutez --endpoint-url si vous utilisez un autre fournisseur que AWS (ex: Scaleway)
+                aws s3 cp /tmp/$FILENAME $S3_BUCKET/$FILENAME
+                
+                echo "Sauvegarde terminée avec succès !"
+          
+          # Le pod s'éteint une fois le script fini
+          restartPolicy: OnFailure
