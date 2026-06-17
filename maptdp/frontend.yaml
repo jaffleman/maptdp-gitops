@@ -28,7 +28,7 @@ spec:
   project: default
 
   source:
-    repoURL: https://github.com/jaffleman/maptdp-frontend.git
+    repoURL: https://github.com/jaffleman/maptdp-gitops.git
     targetRevision: prod
     path: chart/maptdp-frontend
     helm:
