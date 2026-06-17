@@ -25,7 +25,7 @@ spec:
   source:
     repoURL: https://github.com/jaffleman/maptdp-gitops.git
     targetRevision: prod
-    path: chart/maptdp-db
+    path: charts/maptdp-db
   destination:
     server: https://kubernetes.default.svc
     namespace: maptdp
