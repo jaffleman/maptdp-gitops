@@ -8,7 +8,7 @@ metadata:
 
     argocd-image-updater.argoproj.io/backend.update-strategy: newest-build
 
-    argocd-image-updater.argoproj.io/backend.allow-tags: regexp:^staging-sha-[a-f0-9]{7}$
+    argocd-image-updater.argoproj.io/backend.allow-tags: regexp:^staging-sha-[0-9]{10}$
 
     argocd-image-updater.argoproj.io/write-back-method: git
     argocd-image-updater.argoproj.io/git-branch: staging
