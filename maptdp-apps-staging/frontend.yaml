@@ -12,7 +12,7 @@ metadata:
     argocd-image-updater.argoproj.io/frontend.update-strategy: newest-build
 
     # ✅ filtrer uniquement les tags SHA
-    argocd-image-updater.argoproj.io/frontend.allow-tags: regexp:^staging-sha-[a-f0-9]{7}$
+    argocd-image-updater.argoproj.io/frontend.allow-tags: regexp:^staging-sha-[0-9]{10}$
 
 
     # ✅ écriture dans Git (GitOps)
