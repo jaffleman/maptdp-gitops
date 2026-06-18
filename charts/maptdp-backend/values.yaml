@@ -9,7 +9,7 @@ enabled: true
 backend:
   image:
     repository: docker.io/jaffleman971/maptdp-backend
-    tag: ""
+    tag: "latest"
     pullPolicy: IfNotPresent
 
 service:
