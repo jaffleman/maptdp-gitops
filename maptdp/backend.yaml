@@ -11,7 +11,7 @@ metadata:
     argocd-image-updater.argoproj.io/backend.update-strategy: newest-build
 
     # 3. Filter only SHA tags and ignore the 'latest' string tag
-    argocd-image-updater.argoproj.io/backend.allow-tags: regexp:^dev-sha-[a-f0-9]{7}$
+    argocd-image-updater.argoproj.io/backend.allow-tags: regexp:^sha-[a-f0-9]{7}$
     argocd-image-updater.argoproj.io/backend.ignore-tags: latest
 
     # 5. GitOps Write-back method
