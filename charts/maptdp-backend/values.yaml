@@ -9,7 +9,7 @@ enabled: true
 backend:
   image:
     repository: docker.io/jaffleman971/maptdp-backend
-    tag: "sha-d95af5e"
+    tag: "staging-latest"
     pullPolicy: IfNotPresent
 service:
   type: ClusterIP

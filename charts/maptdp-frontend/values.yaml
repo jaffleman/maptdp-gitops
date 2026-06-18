@@ -7,7 +7,7 @@ replicaCount: 1
 frontend:
   image:
     repository: docker.io/jaffleman971/maptdp-frontend
-    tag: "sha-d8223e9"
+    tag: "staging-latest"
     pullPolicy: IfNotPresent
 service:
   type: ClusterIP
