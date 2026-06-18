@@ -4,5 +4,5 @@ helm:
     value: docker.io/jaffleman971/maptdp-backend
     forcestring: true
   - name: backend.image.tag
-    value: dev-sha-6bc188f
+    value: dev-sha-5a5a66b
     forcestring: true
