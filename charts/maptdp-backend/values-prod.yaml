@@ -6,9 +6,9 @@ ingress:
   path: /
 env:
   - name: NODE_ENV
-    value: "production"
+    value: "prod"
   - name: LOG_LEVEL
-    value: "info"
+    value: "nan"
 
 #    - name: DATABASE_URL
 #      valueFrom:
