@@ -5,3 +5,10 @@ ingress:
 
 runtimeConfig:
   apiBaseUrl: "https://api.dev.jaffleman.tech"
+env:
+  - name: PORT
+    value: "80"
+  - name: NODE_ENV
+    value: "dev"
+  - name: LOG_LEVEL
+    value: "debug"
