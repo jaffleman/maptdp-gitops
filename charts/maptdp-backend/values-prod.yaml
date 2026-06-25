@@ -4,11 +4,14 @@ image:
 ingress:
   host: "api.jaffleman.tech"
   path: /
+
 env:
+  - name: PORT
+    value: "80"
   - name: NODE_ENV
     value: "prod"
   - name: LOG_LEVEL
-    value: "nan"
+    value: "info"
 
 #    - name: DATABASE_URL
 #      valueFrom:
