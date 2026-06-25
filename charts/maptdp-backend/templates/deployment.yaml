@@ -41,28 +41,34 @@ spec:
           
             # ✅ valeurs sensibles (Vault)
             - name: DB_HOST
-              value: "maptdp-db"
+              valueFrom:
+                secretKeyRef:
+                  name: maptdp-db-auth
+                  key: DB_HOST
           
             - name: DB_PORT
-              value: "5432"
+              valueFrom:
+                secretKeyRef:
+                  name: maptdp-db-auth
+                  key: DB_PORT
           
             - name: DB_USER
               valueFrom:
                 secretKeyRef:
                   name: maptdp-db-auth
-                  key: user
+                  key: DB_USER
           
             - name: DB_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: maptdp-db-auth
-                  key: password
+                  key: DB_PASSWORD
           
             - name: DB_NAME
               valueFrom:
                 secretKeyRef:
                   name: maptdp-db-auth
-                  key: db
+                  key: DB_NAME
 
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
