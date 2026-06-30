@@ -1,7 +1,0 @@
-replicaCount: 2
-
-ingress:
-  host: "maptdp.staging.jaffleman.tech"
-
-runtimeConfig:
-  apiBaseUrl: "https://api.staging.jaffleman.tech"
