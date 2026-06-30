@@ -1,6 +1,6 @@
 db:
   image:
-    tag: "latest"
+    tag: "16.21"
 
 persistence:
   size: 3Gi
