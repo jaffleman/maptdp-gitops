@@ -25,7 +25,7 @@ spec:
 
           argocd:
             grpcWeb: true
-            serverAddress: "argocd.jaffleman.tech"
+            serverAddress: "argocd.dev-staging.jaffleman.tech"
             insecure: true
             plaintext: true
 
