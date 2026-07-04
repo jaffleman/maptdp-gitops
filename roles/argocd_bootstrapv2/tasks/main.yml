@@ -1,0 +1,75 @@
+- name: Wait for ArgoCD server to be ready
+  ansible.builtin.command: >
+    kubectl rollout status deployment/argocd-server
+    -n argocd
+    --timeout=300s
+  environment:
+    KUBECONFIG: "{{ kubeconfig_path }}"
+  changed_when: false
+
+- name: Deploy ArgoCD Single Root Application (Bootstrap)
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    state: present
+    definition: "{{ lookup('file', '/home/jaffleman/ansible/root_app_dir/root-appv2.yaml') | from_yaml }}"
+
+- name: Wait for ArgoCD app 'root-appv2' to be Synced & Healthy
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ kubeconfig_path }}"
+    api_version: argoproj.io/v1alpha1
+    kind: Application
+    name: root-appv2
+    namespace: argocd
+  register: app_status
+  until:
+    - app_status.resources | length > 0
+    - app_status.resources[0].status is defined
+    - app_status.resources[0].status.sync is defined
+    - app_status.resources[0].status.health is defined
+    - app_status.resources[0].status.sync.status == "Synced"
+    - app_status.resources[0].status.health.status == "Healthy"
+  retries: 60
+  delay: 10
+
+
+- name: Deploy ArgoCD root-app-maptdp-dev.yaml (Bootstrap)
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    state: present
+    definition: "{{ lookup('file', '/home/jaffleman/ansible/root_app_dir/root-app-maptdp-dev.yaml') | from_yaml }}"
+
+- name: Wait for ArgoCD app 'root-app-maptdp-dev' to be Synced & Healthy
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ kubeconfig_path }}"
+    api_version: argoproj.io/v1alpha1
+    kind: Application
+    name: root-app-maptdp-dev
+    namespace: argocd
+  register: app_status
+  until:
+    - app_status.resources | length > 0
+    - app_status.resources[0].status.sync.status == "Synced"
+    - app_status.resources[0].status.health.status == "Healthy"
+  retries: 60
+  delay: 10
+
+- name: Deploy ArgoCD root-app-maptdp-staging.yaml (Bootstrap)
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    state: present
+    definition: "{{ lookup('file', '/home/jaffleman/ansible/root_app_dir/root-app-maptdp-staging.yaml') | from_yaml }}"
+
+- name: Wait for ArgoCD app 'root-app-maptdp-staging' to be Synced & Healthy
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ kubeconfig_path }}"
+    api_version: argoproj.io/v1alpha1
+    kind: Application
+    name: root-app-maptdp-staging
+    namespace: argocd
+  register: app_status
+  until:
+    - app_status.resources | length > 0
+    - app_status.resources[0].status.sync.status == "Synced"
+    - app_status.resources[0].status.health.status == "Healthy"
+  retries: 60
+  delay: 10

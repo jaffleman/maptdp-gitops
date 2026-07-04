@@ -1,0 +1,35 @@
+- name: Add HashiCorp Helm repo
+  kubernetes.core.helm_repository:
+    name: hashicorp
+    repo_url: "https://helm.releases.hashicorp.com"
+
+- name: Install / Upgrade Vault Secrets Operator
+  kubernetes.core.helm:
+    name: vault-secrets-operator
+    chart_ref: hashicorp/vault-secrets-operator
+    release_namespace: kube-system
+    create_namespace: true
+    chart_version: "{{ vault_secrets_chart_version }}"
+    kubeconfig: "{{ kubeconfig_path }}"
+    values:
+      controller:
+        create: true
+      # On écrase l'image morte par le nouveau registre officiel de Kubernetes
+      kubeRbacProxy:
+        image:
+          repository: registry.k8s.io/kubebuilder/kube-rbac-proxy
+          tag: v0.15.0
+
+- name: Wait for Vault Secrets Operator deployment to be ready
+  kubernetes.core.k8s_info:
+    api_version: apps/v1
+    kind: Deployment
+    namespace: kube-system
+    name: vault-secrets-operator-controller-manager # <-- Le nom exact constaté
+    kubeconfig: "{{ kubeconfig_path }}"
+  register: vso_deployment
+  retries: 20
+  delay: 5
+  until: >
+    vso_deployment.resources | length > 0 and
+    (vso_deployment.resources[0].status.readyReplicas | default(0)) == (vso_deployment.resources[0].status.replicas | default(1))

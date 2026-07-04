@@ -1,0 +1,33 @@
+# -------------------------
+# FIREWALL - PORTS GLOBAUX
+# -------------------------
+
+- name: Autoriser les ports globaux
+  ufw:
+    rule: allow
+    port: "{{ item.port }}"
+    proto: "{{ item.proto }}"
+  loop: "{{ ufw_allowed_ports }}"
+
+# -------------------------
+# FIREWALL - K3S
+# -------------------------
+
+- name: Autoriser les ports K3s
+  ufw:
+    rule: allow
+    port: "{{ item.port }}"
+    proto: "{{ item.proto }}"
+  loop: "{{ k3s_ports }}"
+
+# -------------------------
+# FIREWALL - PORTS EXTRA
+# -------------------------
+
+- name: Autoriser les ports supplémentaires
+  ufw:
+    rule: allow
+    port: "{{ item.port }}"
+    proto: "{{ item.proto }}"
+  loop: "{{ ufw_extra_ports }}"
+  when: ufw_extra_ports | length > 0

@@ -1,0 +1,14 @@
+- name: Wait for ClusterIssuer CRD
+  kubernetes.core.k8s_info:
+    kind: CustomResourceDefinition
+    name: clusterissuers.cert-manager.io
+    kubeconfig: "{{ kubeconfig_path }}"
+  register: crd_check
+  retries: 10
+  delay: 5
+  until: crd_check.resources | length > 0
+
+- name: Déployer ClusterIssuer staging
+  template:
+    src: clusterissuer-staging.yaml.j2
+    dest: /var/lib/rancher/k3s/server/manifests/clusterissuer-staging.yaml

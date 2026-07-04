@@ -1,0 +1,17 @@
+# -------------------------
+# GENERAL NAMESPACE / RELEASE
+# -------------------------
+
+external_secrets_namespace: external-secrets
+external_secrets_release: external-secrets
+
+# -------------------------
+# HELM CONFIGURATION
+# -------------------------
+
+external_secrets_repo: https://charts.external-secrets.io
+external_secrets_chart: external-secrets/external-secrets
+external_secrets_chart_version: "0.10.6"
+
+# Optional Helm values override
+external_secrets_values: {}

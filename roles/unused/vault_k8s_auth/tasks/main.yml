@@ -1,0 +1,76 @@
+- name: Create vault reviewer SA
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: ServiceAccount
+      metadata:
+        name: vault-reviewer
+        namespace: kube-system
+    kubeconfig: "{{ kubeconfig_path }}"
+
+- name: Bind auth-delegator role
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    state: present
+    definition:
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: ClusterRoleBinding
+      metadata:
+        name: vault-reviewer
+      roleRef:
+        apiGroup: rbac.authorization.k8s.io
+        kind: ClusterRole
+        name: system:auth-delegator
+      subjects:
+        - kind: ServiceAccount
+          name: vault-reviewer
+          namespace: kube-system
+
+- name: Get Kubernetes CA cert
+  command: >
+    kubectl config view --raw --minify --flatten
+    -o jsonpath='{.clusters[0].cluster.certificate-authority-data}'
+  register: k8s_ca
+
+- name: Write CA cert to file
+  copy:
+    content: "{{ k8s_ca.stdout | b64decode }}"
+    dest: /tmp/k8s-ca.crt
+
+- name: Get Kubernetes API server
+  command: kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}'
+  register: k8s_host
+
+- name: Configure Vault Kubernetes auth
+  command: >
+    vault write auth/kubernetes/config
+    kubernetes_host="{{ k8s_host.stdout }}"
+    kubernetes_ca_cert=@/tmp/k8s-ca.crt
+    issuer="https://kubernetes.default.svc.cluster.local"
+    disable_iss_validation=true
+  environment:
+    VAULT_ADDR: "https://vault.jaffleman.tech"
+    VAULT_TOKEN: "{{ vault_token }}"
+
+- name: Ensure maptdp namespace exists
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: maptdp
+  environment:
+    KUBECONFIG: "{{ kubeconfig_path }}"
+
+- name: Create app ServiceAccount
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    state: present
+    definition:
+      apiVersion: v1
+      kind: ServiceAccount
+      metadata:
+        name: vault-auth
+        namespace: maptdp

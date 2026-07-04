@@ -1,0 +1,12 @@
+traefik_namespace: traefik
+
+traefik_chart_name: traefik
+traefik_chart_repo: https://traefik.github.io/charts
+traefik_chart_version: "40.2.0"
+traefik_service_type: NodePort
+
+traefik_ports:
+  web:
+    nodePort: 30080
+  websecure:
+    nodePort: 30443

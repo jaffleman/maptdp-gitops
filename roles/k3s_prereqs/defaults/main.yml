@@ -1,0 +1,11 @@
+ufw_allowed_ports:
+  - { port: "{{ ssh_port }}", proto: tcp }
+  - { port: 80, proto: tcp }
+  - { port: 443, proto: tcp }
+
+k3s_ports:
+  - { port: 6443, proto: tcp }
+  - { port: 10250, proto: tcp }
+  - { port: 8472, proto: udp }
+
+ufw_extra_ports: []

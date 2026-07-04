@@ -1,0 +1,28 @@
+- name: Wait for ArgoCD server to be ready
+  ansible.builtin.command: >
+    kubectl rollout status deployment/argocd-server
+    -n argocd
+    --timeout=300s
+  environment:
+    KUBECONFIG: "{{ kubeconfig_path }}"
+
+- name: Deploy ArgoCD root application step0
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    state: present
+    definition: "{{ lookup('file', playbook_dir + '/../../deploy/bootstrap/root-app.yaml') | from_yaml }}"
+
+
+- name: Deploy ArgoCD root application step1
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    state: present
+    definition: "{{ lookup('file', playbook_dir + '/../../deploy/bootstrap/root-app2.yaml') | from_yaml }}"
+
+
+- name: Deploy ArgoCD root application step2
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    state: present
+    definition: "{{ lookup('file', playbook_dir + '/../../deploy/bootstrap/root-app3.yaml') | from_yaml }}"
+ 

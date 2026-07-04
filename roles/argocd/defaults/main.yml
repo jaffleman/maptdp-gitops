@@ -1,0 +1,17 @@
+argocd_namespace: argocd
+argocd_repo: https://argoproj.github.io/argo-helm
+argocd_version: "v2.11.7"
+
+# Domaine d'accès Argo CD (dev/staging)
+argocd_hostname: argocd.jaffleman.tech
+
+# Cert-manager
+argocd_tls_issuer: letsencrypt-staging
+argocd_chart: argocd/argo-cd
+argocd_chart_version: "7.3.6"   # dernière version stable du chart au 28 mai 2026
+
+argocd_release: argocd
+argocd_values: 
+  configs:
+    secret:
+      createSecret: false

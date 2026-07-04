@@ -1,0 +1,292 @@
+- name: "VSO App : Ensure namespace argocd exists"
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    api_version: v1
+    kind: Namespace
+    name: argocd
+    state: present
+
+# -------------------------
+# Vault Connection
+# -------------------------
+
+- name: "VSO App : Configure VaultConnection CRD"
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    state: present
+    definition:
+      apiVersion: secrets.hashicorp.com/v1beta1
+      kind: VaultConnection
+      metadata:
+        name: vault-connection-maptdp
+        namespace: argocd
+      spec:
+        address: "https://vault.jaffleman.tech"
+
+# -------------------------
+# Service Account
+# -------------------------
+
+- name: "VSO App : Create ServiceAccount for Vault authentication"
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    state: present
+    definition:
+      apiVersion: v1
+      kind: ServiceAccount
+      metadata:
+        name: vso-argocd-sa
+        namespace: argocd
+
+- name: "VSO App : Grant auth-delegator permissions to ServiceAccount"
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    state: present
+    definition:
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: ClusterRoleBinding
+      metadata:
+        name: vso-auth-delegator-argocd
+      roleRef:
+        apiGroup: rbac.authorization.k8s.io
+        kind: ClusterRole
+        name: system:auth-delegator
+      subjects:
+        - kind: ServiceAccount
+          name: vso-argocd-sa
+          namespace: argocd
+
+# -------------------------
+# Vault Auth
+# -------------------------
+
+- name: "VSO App : Configure VaultAuth CRD"
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    state: present
+    definition:
+      apiVersion: secrets.hashicorp.com/v1beta1
+      kind: VaultAuth
+      metadata:
+        name: vault-jwt-auth
+        namespace: argocd
+      spec:
+        vaultConnectionRef: vault-connection-maptdp
+        method: kubernetes
+        mount: kubernetes
+        kubernetes:
+          role: argocd-role
+          serviceAccount: vso-argocd-sa
+
+# -------------------------
+# ArgoCD Secret
+# -------------------------
+
+- name: "VSO App : Configure VaultStaticSecret to generate argocd-secret"
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    state: present
+    definition:
+      apiVersion: secrets.hashicorp.com/v1beta1
+      kind: VaultStaticSecret
+      metadata:
+        name: argocd-secret-sync
+        namespace: argocd
+      spec:
+        vaultAuthRef: vault-jwt-auth
+        mount: k3s
+        path: maptdp/argocd
+        type: kv-v2
+        refreshAfter: 5m
+        destination:
+          name: argocd-secret
+          create: true
+          overwrite: true
+
+# -------------------------
+# DockerHub Secret
+# -------------------------
+
+- name: "VSO App : Configure VaultStaticSecret to generate dockerhub-auth"
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    state: present
+    definition:
+      apiVersion: secrets.hashicorp.com/v1beta1
+      kind: VaultStaticSecret
+      metadata:
+        name: dockerhub-secret-sync
+        namespace: argocd
+      spec:
+        vaultAuthRef: vault-jwt-auth
+        mount: k3s
+        path: maptdp/dockerhub
+        type: kv-v2
+        refreshAfter: 5m
+
+        destination:
+          name: dockerhub-secret
+          create: true
+          overwrite: true
+          type: kubernetes.io/dockerconfigjson
+
+          transformation:
+            excludeRaw: true
+
+            templates:
+              .dockerconfigjson:
+                text: >-
+                  {% raw %}
+                  {{- printf "{\"auths\":{\"https://registry-1.docker.io\":{\"username\":\"%s\",\"password\":\"%s\",\"auth\":\"%s\"}}}" .Secrets.username .Secrets.password (printf "%s:%s" .Secrets.username .Secrets.password | b64enc) }}
+                  {% endraw %}
+
+- name: "VSO App : Configure VaultStaticSecret to generate image-updater-auth backend"
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    state: present
+    definition:
+      apiVersion: secrets.hashicorp.com/v1beta1
+      kind: VaultStaticSecret
+      metadata:
+        name: argocd-repo-backend
+        namespace: argocd
+      spec:
+        vaultAuthRef: vault-jwt-auth
+        mount: k3s
+        path: maptdp/github/maptdp-backend
+        type: kv-v2
+        refreshAfter: 5m
+
+        destination:
+          name: argocd-repo-backend
+          create: true
+          overwrite: true
+
+          labels:
+            argocd.argoproj.io/secret-type: repository
+
+- name: "VSO App : Configure VaultStaticSecret to generate image-updater-auth frontend"
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    state: present
+    definition:
+      apiVersion: secrets.hashicorp.com/v1beta1
+      kind: VaultStaticSecret
+      metadata:
+        name: argocd-repo-frontend
+        namespace: argocd
+      spec:
+        vaultAuthRef: vault-jwt-auth
+        mount: k3s
+        path: maptdp/github/maptdp-frontend
+        type: kv-v2
+        refreshAfter: 5m
+
+        destination:
+          name: argocd-repo-frontend
+          create: true
+          overwrite: true
+
+          labels:
+            argocd.argoproj.io/secret-type: repository
+
+
+
+- name: "VSO App : Configure VaultStaticSecret to generate image-updater-auth database"
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    state: present
+    definition:
+      apiVersion: secrets.hashicorp.com/v1beta1
+      kind: VaultStaticSecret
+      metadata:
+        name: argocd-repo-database
+        namespace: argocd
+      spec:
+        vaultAuthRef: vault-jwt-auth
+        mount: k3s
+        path: maptdp/github/maptdp-database
+        type: kv-v2
+        refreshAfter: 5m
+
+        destination:
+          name: argocd-repo-database
+          create: true
+          overwrite: true
+
+          labels:
+            argocd.argoproj.io/secret-type: repository
+
+- name: "VSO App : Configure VaultStaticSecret to generate image-updater-auth gitops"
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    state: present
+    definition:
+      apiVersion: secrets.hashicorp.com/v1beta1
+      kind: VaultStaticSecret
+      metadata:
+        name: argocd-repo-gitops
+        namespace: argocd
+      spec:
+        vaultAuthRef: vault-jwt-auth
+        mount: k3s
+        path: maptdp/github/gitops
+        type: kv-v2
+        refreshAfter: 5m
+
+        destination:
+          name: argocd-repo-gitops
+          create: true
+          overwrite: true
+
+          labels:
+            argocd.argoproj.io/secret-type: repository
+# -------------------------
+# ArgoCD Image Updater ConfigMap
+# -------------------------
+
+# - name: "Configure ArgoCD Image Updater registry config"
+#   kubernetes.core.k8s:
+#     kubeconfig: "{{ kubeconfig_path }}"
+#     state: present
+#     definition:
+#       apiVersion: v1
+#       kind: ConfigMap
+#       metadata:
+#         name: argocd-image-updater-config
+#         namespace: argocd
+#       data:
+#         log.level: info
+#         kube.events: "false"
+#         argocd.grpc_web: "true"
+#         argocd.insecure: "false"
+#         argocd.plaintext: "false"
+
+#         registries.conf: |
+#           registries:
+#             - name: dockerhub
+#               api_url: https://index.docker.io/v1/
+#               prefix: docker.io
+#               credentials: pullsecret:argocd/dockerhub-secret
+#               default: true
+#               ping: true
+
+# -------------------------
+# Restart Image Updater
+# -------------------------
+
+- name: "Restart ArgoCD Image Updater"
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    state: patched
+    definition:
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: argocd-image-updater
+        namespace: argocd
+      spec:
+        template:
+          metadata:
+            annotations:
+              restarted-at: "{{ ansible_date_time.iso8601 }}"

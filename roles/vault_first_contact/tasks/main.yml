@@ -1,0 +1,45 @@
+- name: "Vault : Authentification temporaire via AppRole"
+  ansible.builtin.uri:
+    url: "https://vault.jaffleman.tech/v1/auth/approle/login"
+    method: POST
+    body_format: json
+    body:
+      role_id: "{{ vault_ansible_role_id }}"     
+      secret_id: "{{ vault_ansible_secret_id }}" 
+  register: vault_login
+  delegate_to: localhost
+  connection: local
+  become: false
+  vars:
+    ansible_become: false
+
+
+- name: "Vault : Debug - afficher le token"
+  ansible.builtin.debug:
+    msg: "{{ vault_login.json.auth.client_token }}"
+
+
+- name: Récupérer le certificat CA depuis le VPS distant
+  ansible.builtin.slurp:
+    src: /var/lib/rancher/k3s/server/tls/server-ca.crt
+  register: k3s_ca_encoded
+  # become: true # Ajoutez ceci si l'utilisateur Ansible a besoin de root pour lire le certificat
+
+- name: "Vault : Mise à jour automatique du CA K3s"
+  ansible.builtin.uri:
+    url: "https://vault.jaffleman.tech/v1/auth/kubernetes/config"
+    method: POST
+    headers:
+      X-Vault-Token: "{{ vault_login.json.auth.client_token }}"
+    body_format: json
+    body:
+      kubernetes_host: "https://146.59.231.136:6443"
+      disable_iss_validation: true
+      disable_local_ca_jwt: true
+      kubernetes_ca_cert: "{{ k3s_ca_encoded['content'] | b64decode }}"
+    status_code: [200, 204]
+  delegate_to: localhost
+  connection: local
+  become: false
+  vars:
+    ansible_become: false

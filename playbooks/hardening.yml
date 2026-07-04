@@ -1,0 +1,5 @@
+- name: Hardening de base du VPS Ubuntu
+  hosts: all
+  become: true
+  roles:
+    - ssh_hardening

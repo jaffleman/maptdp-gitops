@@ -1,0 +1,76 @@
+# -------------------------
+# INSTALLATION K3S
+# -------------------------
+
+- name: Télécharger script d'installation k3s
+  get_url:
+    url: https://get.k3s.io
+    dest: /tmp/k3s_install.sh
+    mode: '0755'
+
+- name: Installer k3s sans Traefik
+  shell: |
+    INSTALL_K3S_EXEC="--disable=traefik" sh /tmp/k3s_install.sh
+  args:
+    creates: /usr/local/bin/k3s
+
+# -------------------------
+# ATTENTE DU CLUSTER
+# -------------------------
+
+- name: Attendre que le node k3s soit ready
+  shell: k3s kubectl get nodes
+  register: k3s_status
+  retries: 10
+  delay: 5
+  until: k3s_status.rc == 0
+
+# -------------------------
+# KUBECONFIG
+# -------------------------
+
+- name: Créer dossier .kube pour l'utilisateur
+  file:
+    path: "/home/{{ kube_user }}/.kube"
+    state: directory
+    owner: "{{ kube_user }}"
+    mode: '0755'
+
+- name: Copier kubeconfig pour l'utilisateur
+  copy:
+    src: /etc/rancher/k3s/k3s.yaml
+    dest: "{{ kubeconfig_path }}"
+    owner: "{{ kube_user }}"
+    mode: '0600'
+    remote_src: true
+
+- name: Fix kubeconfig permissions
+  ansible.builtin.file:
+    path: /etc/rancher/k3s/k3s.yaml
+    mode: '0644'
+
+- name: Remplacer localhost par IP publique dans kubeconfig
+  replace:
+    path: "{{ kubeconfig_path }}"
+    regexp: '127.0.0.1'
+    replace: "{{ ansible_host }}"
+
+# -------------------------
+# EXPORT KUBECONFIG
+# -------------------------
+
+- name: Ajouter KUBECONFIG dans le bashrc
+  lineinfile:
+    path: "/home/{{ kube_user }}/.bashrc"
+    line: "export KUBECONFIG={{ kubeconfig_path }}"
+    create: yes
+
+# -------------------------
+# VALIDATION
+# -------------------------
+
+- name: Vérifier accès cluster
+  become_user: "{{ kube_user }}"
+  shell: kubectl get nodes
+  environment:
+    KUBECONFIG: "{{ kubeconfig_path }}"

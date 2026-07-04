@@ -1,0 +1,15 @@
+# -------------------------
+# Ports http/https – UFW
+# -------------------------
+
+- name: Autoriser le port http (80)
+  ufw:
+    rule: allow
+    port: "{{ http_port }}"
+    proto: tcp
+
+- name: Autoriser le port https (443)
+  ufw:
+    rule: allow
+    port: "{{ https_port }}"
+    proto: tcp

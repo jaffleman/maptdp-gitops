@@ -1,0 +1,71 @@
+- name: Installer les dépendances Python pour Kubernetes via APT
+  ansible.builtin.apt:
+    name: 
+      - python3-pip
+      - python3-kubernetes
+    state: present
+    update_cache: yes
+  become: true
+
+- name: S'assurer que le namespace applicatif existe
+  kubernetes.core.k8s:
+    name: "{{ app_namespace }}"
+    api_version: v1
+    kind: Namespace
+    state: present
+    kubeconfig: "{{ k8s_kubeconfig }}"
+  become: true
+
+- name: Créer le secret d'authentification AppRole
+  kubernetes.core.k8s:
+    state: present
+    kubeconfig: "{{ k8s_kubeconfig }}"
+    definition:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: vault-approle-token
+        namespace: "{{ app_namespace }}"
+      stringData:
+        secret-id: "{{ global_vault_secret_id }}"
+  become: true
+
+- name: Attendre que les CRD External Secrets soient enregistrées
+  kubernetes.core.k8s_info:
+    kind: CustomResourceDefinition
+    name: secretstores.external-secrets.io
+    kubeconfig: "{{ k8s_kubeconfig }}"
+  register: crd_check
+  until: crd_check.resources | length > 0
+  retries: 10
+  delay: 5
+
+- name: Rafraîchir le cache de l'API Kubernetes
+  meta: flush_handlers
+  
+
+- name: Copier le manifest SecretStore
+  template:
+    src: vault-secretstore.yml.j2
+    dest: /tmp/vault-secretstore.yaml
+
+- name: Déployer le SecretStore 
+  command: >
+    kubectl --kubeconfig {{ k8s_kubeconfig }} apply -f /tmp/vault-secretstore.yaml
+  become: true
+  environment:
+    KUBECONFIG: "{{ k8s_kubeconfig }}"
+
+
+- name: Copier le manifest ExternalSecret
+  template:
+    src: db-external-secret.yml.j2
+    dest: /tmp/db-external-secret.yaml
+
+- name: Déployer l'ExternalSecret
+  command: >
+    kubectl --kubeconfig {{ k8s_kubeconfig }} apply -f /tmp/db-external-secret.yaml
+  become: true
+  environment:
+    KUBECONFIG: "{{ k8s_kubeconfig }}"
+

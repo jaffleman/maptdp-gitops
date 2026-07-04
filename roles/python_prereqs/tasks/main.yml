@@ -1,0 +1,21 @@
+# -------------------------
+# INSTALLATION DEPENDANCES
+# -------------------------
+- name: Installer outils de base Python dans le venv
+  raw: /opt/ansible-venv/bin/pip install --upgrade pip setuptools packaging
+
+
+- name: Installer dépendances Kubernetes dans venv
+  pip:
+    name:
+      - kubernetes
+      - openshift
+    virtualenv: /opt/ansible-venv
+
+# -------------------------
+# VALIDATION
+# -------------------------
+
+- name: Vérifier import kubernetes
+  command: /opt/ansible-venv/bin/python -c "import kubernetes; print('OK')"
+  changed_when: false

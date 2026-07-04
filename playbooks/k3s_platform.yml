@@ -1,0 +1,85 @@
+- name: Bootstrap Kubernetes + ArgoCD + Vault integration
+  hosts: k3s_nodes
+  become: true
+  vars:
+    kubeconfig_path: /etc/rancher/k3s/k3s.yaml
+  any_errors_fatal: true
+
+  # -------------------------
+  # PRE-TASKS (robuste)
+  # -------------------------
+
+  pre_tasks:
+
+    - name: Wait for apt lock to be released
+      ansible.builtin.shell: |
+        while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; do
+          echo "Waiting for apt lock..."
+          sleep 5
+        done
+      changed_when: false
+
+    - name: Ensure python3-venv is installed
+      ansible.builtin.apt:
+        name: python3-venv
+        state: present
+        update_cache: yes
+        lock_timeout: 300
+      register: apt_result
+      retries: 5
+      delay: 15
+      until: apt_result is succeeded
+
+    - name: Create virtualenv for Ansible
+      ansible.builtin.command:
+        cmd: python3 -m venv /opt/ansible-venv
+      args:
+        creates: /opt/ansible-venv/bin/python
+
+    - name: Set ansible Python interpreter
+      ansible.builtin.set_fact:
+        ansible_python_interpreter: /opt/ansible-venv/bin/python
+
+# -------------------------
+# ROLES (ORDRE PROPRE)
+# -------------------------
+
+  roles:
+
+    # 🔐 Security baseline
+    - { role: security, tags: [security] }
+
+    # 🐍 Runtime (pip / k8s modules) — DOIT PASSER AVANT TOUT LE RESTE
+    - { role: python_prereqs, tags: [runtime] }
+
+    # ⚙️ Kubernetes infra
+    - { role: k3s_prereqs, tags: [k3s] }
+    - { role: k3s_server, tags: [k3s] }
+
+    # 🧑‍🤝‍🧑 Vault - 1. contact et configuration de base
+    - { role: vault_first_contact, tags: [vault] }
+
+    # 📦 Tooling
+    - { role: helm, tags: [helm] }
+
+    # 🔐 installation de vault secret operator
+    - { role: vault_secret_operator, tags: [vault] }
+
+    # 2. gestion - role: liaison et création du secret applicatif
+    # - {role: vso_app_sync, tags: [vault, app_sync]}
+    - {role: vso_argocd_sync, tags: [argocd, app_sync]}
+    # - {role: vso_grafana_sync, tags: [grafana, app_sync]}
+
+
+    # 🌐 Ingress Controller
+    - { role: traefik_ingress, tags: [networking] }
+
+    # 🔐 TLS Management
+    - { role: cert_manager, tags: [tls] }
+    - { role: cert_manager_issuers, tags: [tls] }
+
+    # 🚀 GitOps Controller
+    - { role: argocd, tags: [gitops] }
+
+    # 🔥 FUTUR 
+    - { role: argocd_bootstrapv2, tags: [gitops, bootstrap] }

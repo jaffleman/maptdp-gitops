@@ -1,0 +1,13 @@
+# Namespace de l'application
+vso_app_namespace: "maptdp"
+
+# Nom du rôle configuré dans Vault
+vault_role_name: "maptdp-role"
+
+# Configuration du Secret
+vault_secret_mount: "k3s"
+vault_secret_path: "maptdp/db"
+k8s_final_secret_name: "maptdp-db-auth"
+
+# Intervalle de synchronisation (ex: 5m, 1h)
+vso_refresh_interval: "5m"

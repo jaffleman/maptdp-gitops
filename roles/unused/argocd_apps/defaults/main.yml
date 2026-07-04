@@ -1,0 +1,14 @@
+# Repository contenant les Applications Argo CD
+argocd_apps_repo_raw_base: "https://raw.githubusercontent.com/jaffleman/New_MapTdp"
+
+# Branche utilisée
+argocd_apps_repo_branch: "main"
+
+# Chemin vers les manifests Argo CD dans le repo
+argocd_apps_path: "deploy/argocd"
+
+# Liste des Applications Argo CD à bootstrapper
+argocd_applications:
+  - maptdp-db-app.yaml
+  - maptdp-app-dev-front.yaml
+  - maptdp-app-dev-back.yaml

@@ -1,0 +1,34 @@
+- name: Vérifier si Helm est déjà installé
+  ansible.builtin.command: helm version --short
+  register: helm_check
+  changed_when: false
+  failed_when: false
+
+- name: Télécharger le script d'installation Helm
+  ansible.builtin.get_url:
+    url: https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
+    dest: /tmp/get_helm.sh
+    mode: '0700'
+  when: helm_check.rc != 0
+
+- name: Installer Helm
+  ansible.builtin.command:
+    cmd: /tmp/get_helm.sh
+  when: helm_check.rc != 0
+  environment:
+    DESIRED_VERSION: "{{ helm_version }}"
+
+- name: Supprimer le script d'installation
+  ansible.builtin.file:
+    path: /tmp/get_helm.sh
+    state: absent
+  when: helm_check.rc != 0
+
+- name: Vérifier l'installation Helm
+  ansible.builtin.command: helm version --short
+  register: helm_version_check
+  changed_when: false
+
+- name: Afficher la version Helm installée
+  ansible.builtin.debug:
+    msg: "Helm installé : {{ helm_version_check.stdout }}"

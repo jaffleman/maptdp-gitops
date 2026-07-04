@@ -1,0 +1,43 @@
+deployment:
+  replicas: 1
+
+service:
+  type: {{ traefik_service_type }}
+
+ports:
+  web:
+    port: 80
+    expose:
+      default: true
+    nodePort: {{ traefik_ports.web.nodePort }}
+
+  websecure:
+    port: 443
+    expose:
+      default: true
+    nodePort: {{ traefik_ports.websecure.nodePort }}
+
+additionalArguments:
+  - "--entryPoints.web.address=:80"
+  - "--entryPoints.websecure.address=:443"
+  - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
+  - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
+  - "--api.dashboard=true"
+  - "--accesslog=true"
+
+ingressClass:
+  enabled: true
+  isDefaultClass: true
+  name: traefik
+
+providers:
+  kubernetesIngress:
+    enabled: true
+
+api:
+  dashboard: true
+  insecure: false
+
+logs:
+  general:
+    level: INFO

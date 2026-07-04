@@ -1,0 +1,91 @@
+
+- name: "VSO App : Ensure namespace {{ vso_app_namespace }} exists"
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    api_version: v1
+    kind: Namespace
+    name: "{{ vso_app_namespace }}"
+    state: present
+
+# --- ÉTAPE AJOUTÉE : Déclarer l'adresse de ton Vault ---
+- name: "VSO App : Configure VaultConnection CRD"
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    state: present
+    definition:
+      apiVersion: secrets.hashicorp.com/v1beta1
+      kind: VaultConnection
+      metadata:
+        name: vault-connection-maptdp
+        namespace: "{{ vso_app_namespace }}"
+      spec:
+        # L'URL de ton serveur Vault trouvée dans ton ancien SecretStore
+        address: "https://vault.jaffleman.tech"
+
+- name: "VSO App : Create ServiceAccount for Vault authentication"
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    state: present
+    definition:
+      apiVersion: v1
+      kind: ServiceAccount
+      metadata:
+        name: vso-app-sa
+        namespace: "{{ vso_app_namespace }}"
+
+- name: "VSO App : Grant auth-delegator permissions to ServiceAccount"
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    state: present
+    definition:
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: ClusterRoleBinding
+      metadata:
+        name: "vso-auth-delegator-{{ vso_app_namespace }}"
+      roleRef:
+        apiGroup: rbac.authorization.k8s.io
+        kind: ClusterRole
+        name: system:auth-delegator
+      subjects:
+        - kind: ServiceAccount
+          name: vso-app-sa
+          namespace: "{{ vso_app_namespace }}"
+
+- name: "VSO App : Configure VaultAuth CRD db-role"
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    state: present
+    definition:
+      apiVersion: secrets.hashicorp.com/v1beta1
+      kind: VaultAuth
+      metadata:
+        name: vault-jwt-auth
+        namespace: "{{ vso_app_namespace }}"
+      spec:
+        # --- LIAISON NÉCESSAIRE ---
+        vaultConnectionRef: vault-connection-maptdp
+        method: kubernetes
+        mount: kubernetes
+        kubernetes:
+          role: db-role
+          serviceAccount: vso-app-sa
+
+- name: "VSO App : Configure VaultStaticSecret to generate maptdp-db-auth"
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    state: present
+    definition:
+      apiVersion: secrets.hashicorp.com/v1beta1
+      kind: VaultStaticSecret
+      metadata:
+        name: maptdp-db-sync
+        namespace: "{{ vso_app_namespace }}"
+      spec:
+        vaultAuthRef: vault-jwt-auth
+        mount: k3s
+        path: maptdp/db
+        type: kv-v2
+        refreshInterval: 5m
+        destination:
+          name: maptdp-db-auth
+          create: true

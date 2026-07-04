@@ -1,0 +1,265 @@
+# -------------------------
+# PRÉ-REQUIS
+# -------------------------
+
+- name: Mettre à jour le cache APT
+  apt:
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Installer les paquets de sécurité
+  apt:
+    name:
+      - ufw
+      - fail2ban
+    state: present
+
+# # -------------------------
+# # CLÉ SSH
+# # -------------------------
+
+# - name: Vérifier que la clé SSH locale existe
+#   delegate_to: localhost
+#   stat:
+#     path: "{{ ssh_pubkey_path }}"
+#   register: local_ssh_key
+#   become: false
+#   failed_when: not local_ssh_key.stat.exists
+
+# - name: Installer la clé SSH sur le serveur
+#   authorized_key:
+#     user: "{{ ssh_user }}"
+#     state: present
+#     key: "{{ lookup('file', ssh_pubkey_path) }}"
+
+# -------------------------
+# SSH HARDENING (Configuration)
+# -------------------------
+
+- name: Désactiver l'authentification par mot de passe SSH
+  lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^#?PasswordAuthentication'
+    line: 'PasswordAuthentication no'
+    backup: yes
+
+- name: Interdire le login root en SSH
+  lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^#?PermitRootLogin'
+    line: 'PermitRootLogin no'
+
+- name: Activer l'authentification par clé SSH
+  lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^#?PubkeyAuthentication'
+    line: 'PubkeyAuthentication yes'
+
+- name: Définir le port SSH proprement
+  lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^Port '
+    line: "Port {{ ssh_port }}"
+    insertafter: '^#Port 22'
+    validate: 'sshd -t -f %s'
+
+# - name: Supprimer override SSH cloud-init (Ubuntu 24+)
+#   lineinfile:
+#     path: /etc/ssh/sshd_config.d/50-cloud-init.conf
+#     regexp: '^Port '
+#     state: absent
+#   ignore_errors: true
+
+- name: Désactiver X11 forwarding
+  lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^#?X11Forwarding'
+    line: 'X11Forwarding no'
+
+- name: Désactiver agent forwarding
+  lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^#?AllowAgentForwarding'
+    line: 'AllowAgentForwarding no'
+
+- name: Restreindre l'accès SSH à un utilisateur
+  lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^AllowUsers'
+    line: "AllowUsers {{ ssh_user }}"
+
+- name: Vérifier la syntaxe de la configuration SSH
+  command: sshd -t
+  register: sshd_check
+  failed_when: sshd_check.rc != 0
+  changed_when: false
+
+# -------------------------
+# FIREWALL UFW (Préparation des règles AVANT la coupure)
+# -------------------------
+
+- name: Reset UFW (nettoyage complet)
+  ufw:
+    state: reset
+
+- name: Configurer la politique par défaut (Entrée refusée)
+  ufw:
+    direction: incoming
+    policy: deny
+
+- name: Configurer la politique par défaut (Sortie autorisée)
+  ufw:
+    direction: outgoing
+    policy: allow
+
+- name: Autoriser le NOUVEAU port SSH dans le pare-feu
+  ufw:
+    rule: allow
+    port: "{{ ssh_port }}"
+    proto: tcp
+
+- name: Limiter les tentatives sur le nouveau port SSH (anti brute-force)
+  ufw:
+    rule: limit
+    port: "{{ ssh_port }}"
+    proto: tcp
+
+- name: Autoriser les ports nécessaires (HTTP/HTTPS)
+  ufw:
+    rule: allow
+    port: "{{ item.port }}"
+    proto: "{{ item.proto }}"
+  loop: "{{ ufw_allowed_ports }}"
+
+- name: Activer les logs UFW
+  ufw:
+    logging: on
+
+- name: Forcer l'écriture et la persistance des règles UFW
+  command: ufw reload
+  changed_when: false
+
+- name: Activer UFW
+  ufw:
+    state: enabled
+
+# -------------------------
+# BASCULE SERVICE SSH + MAJ LIEN
+# -------------------------
+- name: Activer le service SSH classique
+  systemd:
+    name: ssh.service
+    enabled: true
+
+- name: Arrêter et désactiver COMPLÈTEMENT le socket SSH d'Ubuntu 24+
+  systemd:
+    name: ssh.socket
+    state: stopped
+    enabled: false
+
+- name: Forcer la purge des sockets systemd (Crucial sur Ubuntu 24)
+  systemd:
+    daemon_reload: true
+
+- name: Redémarrer le service SSH classique pour s'approprier les ports
+  systemd:
+    name: ssh.service
+    state: restarted
+
+- name: Mettre à jour immédiatement le port en mémoire pour Ansible
+  set_fact:
+    ansible_port: "{{ ssh_port }}"
+
+- name: Attendre que le nouveau port SSH soit opérationnel et réponde (depuis localhost)
+  wait_for:
+    host: "{{ ansible_host | default(inventory_hostname) }}"
+    port: "{{ ssh_port }}"
+    delay: 2
+    timeout: 30
+    state: started
+    search_regex: OpenSSH
+  delegate_to: localhost
+  become: false
+
+- name: Recharger UFW pour valider la table des règles
+  community.general.ufw:
+    state: reloaded
+
+- name: Supprimer l'autorisation temporaire du port 22 dans UFW
+  community.general.ufw:
+    rule: deny
+    port: '22'
+    proto: tcp
+
+- name: Redémarrer le VPS pour purger définitivement les sockets zombies
+  reboot:
+    reboot_timeout: 120
+    connect_timeout: 10
+    msg: "Reboot appliqué par Ansible suite au changement de port SSH"
+
+- name: Attendre que le VPS réponde exclusivement sur le nouveau port
+  wait_for:
+    host: "{{ ansible_host | default(inventory_hostname) }}"
+    port: "{{ ssh_port }}"
+    delay: 20
+    timeout: 60
+    state: started
+    search_regex: OpenSSH
+  delegate_to: localhost
+  become: false
+
+- name: Forcer Ansible à fermer l'ancienne connexion persistante (ControlMaster)
+  meta: reset_connection
+# -------------------------
+# VERIFICATIONS + AUTRES PACKETS
+# -------------------------
+
+- name: Vérifier les sockets TCP distants (sur le nouveau port !)
+  command: ss -tlnp
+  register: ssh_ports
+  changed_when: false
+
+- name: Filtrer l'affichage SSH
+  debug:
+    msg: "{{ ssh_ports.stdout_lines | select('search', 'ssh') | list }}"
+
+# -------------------------
+# FAIL2BAN
+# -------------------------
+
+- name: Remove old SSH host key
+  ansible.builtin.command: >
+    ssh-keygen -f "/home/jaffleman/.ssh/known_hosts" -R "[146.59.231.136]:63210"
+  delegate_to: localhost
+  become: false
+
+- name: "Attendre 5 secondes pour que Remote SSH Key Removal prenne effet"
+  ansible.builtin.pause:
+    seconds: 5
+
+- name: Créer la configuration fail2ban locale
+  shell: |
+    cat << 'EOF' > /etc/fail2ban/jail.local
+    [DEFAULT]
+    ignoreip = 127.0.0.1/8 ::1 86.246.10.119
+
+    [sshd]
+    enabled = true
+    port = {{ ssh_port }}
+    backend = systemd
+    maxretry = 5                            
+    findtime = 10m
+    bantime = 24h
+    EOF
+  args:
+    executable: /bin/bash
+
+- name: "Attendre 30 secondes que le système et le réseau se stabilisent"
+  ansible.builtin.pause:
+    seconds: 30
+    
+- name: Redémarrer fail2ban
+  systemd:
+    name: fail2ban
+    state: restarted
+    enabled: true

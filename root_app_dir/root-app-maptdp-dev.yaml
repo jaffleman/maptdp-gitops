@@ -1,0 +1,21 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: root-app-maptdp-dev
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: 'https://github.com/jaffleman/maptdp-gitops.git'
+    path: maptdp-apps-dev
+    targetRevision: dev
+
+  destination:
+    server: 'https://kubernetes.default.svc'
+    namespace: rootapp
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

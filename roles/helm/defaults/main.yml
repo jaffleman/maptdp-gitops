@@ -1,0 +1,3 @@
+# defaults/main.yml
+helm_version: ""   # épingler une version précise en prod
+                            # ou "" pour la dernière

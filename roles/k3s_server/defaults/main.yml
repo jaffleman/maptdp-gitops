@@ -1,0 +1,12 @@
+# Version optionnelle
+k3s_version: ""
+
+# Désactiver Traefik intégré
+k3s_disable_traefik: true
+
+# kubeconfig
+kubeconfig_path: "/home/{{ ssh_user }}/.kube/config"
+
+# utilisateur kubectl
+kube_user: "{{ ssh_user }}"
+

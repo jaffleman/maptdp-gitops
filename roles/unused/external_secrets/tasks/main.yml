@@ -1,0 +1,65 @@
+# -------------------------
+# HELM REPOSITORY
+# -------------------------
+
+- name: Add External Secrets Helm repo
+  kubernetes.core.helm_repository:
+    name: external-secrets
+    repo_url: "{{ external_secrets_repo }}"
+  environment:
+    KUBECONFIG: "{{ kubeconfig_path }}"
+
+# -------------------------
+# INSTALL EXTERNAL SECRETS
+# -------------------------
+
+- name: Install External Secrets Operator
+  kubernetes.core.helm:
+    name: "{{ external_secrets_release }}"
+    chart_ref: "{{ external_secrets_chart }}"
+    chart_version: "{{ external_secrets_chart_version }}"
+    release_namespace: "{{ external_secrets_namespace }}"
+    create_namespace: true
+    state: present
+    update_repo_cache: true
+    wait: true
+    timeout: 300s
+    values: "{{ external_secrets_values | default({}) }}"
+  environment:
+    KUBECONFIG: "{{ kubeconfig_path }}"
+
+# -------------------------
+# WAIT PODS READY (ROBUST)
+# -------------------------
+
+- name: Wait External Secrets pods ready
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Pod
+    namespace: "{{ external_secrets_namespace }}"
+    label_selectors:
+      - app.kubernetes.io/name=external-secrets
+    kubeconfig: "{{ kubeconfig_path }}"
+  register: external_secrets_pods
+  retries: 15
+  delay: 5
+  until: >
+    (
+      external_secrets_pods.resources | default([]) | length > 0
+    ) and
+    (
+      external_secrets_pods.resources | default([]) |
+      selectattr('status.containerStatuses', 'defined') |
+      map(attribute='status.containerStatuses') |
+      map('first') |
+      map(attribute='ready') |
+      list
+    ) | min
+
+# -------------------------
+# VALIDATION
+# -------------------------
+
+- name: Show External Secrets pods
+  debug:
+    var: external_secrets_pods.resources

@@ -1,0 +1,56 @@
+- name: Add Traefik Helm repo
+  ansible.builtin.command:
+    cmd: helm repo add traefik {{ traefik_chart_repo }}
+  register: repo_add
+  failed_when: false
+  changed_when: "'already exists' not in repo_add.stderr"
+
+- name: Update Helm repos
+  ansible.builtin.command:
+    cmd: helm repo update
+  changed_when: false
+
+- name: Deploy Traefik values file
+  ansible.builtin.template:
+    src: values.yml.j2
+    dest: /tmp/traefik-values.yml
+
+- name: Install / Upgrade Traefik
+  ansible.builtin.command:
+    cmd: >
+      helm upgrade --install {{ traefik_chart_name }} traefik/traefik
+      --namespace {{ traefik_namespace }}
+      --create-namespace
+      --version {{ traefik_chart_version }}
+      --values /tmp/traefik-values.yml
+  environment:
+    KUBECONFIG: "{{ kubeconfig_path }}"
+  register: helm_result
+  failed_when: helm_result.rc != 0
+  changed_when: >
+    ('Release "' ~ traefik_chart_name ~ '" has been upgraded' in helm_result.stdout)
+    or ('Release "' ~ traefik_chart_name ~ '" does not exist' in helm_result.stdout)
+
+- name: Wait for Traefik rollout
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Pod
+    namespace: "{{ traefik_namespace }}"
+    label_selectors:
+      - app.kubernetes.io/name=traefik
+    kubeconfig: "{{ kubeconfig_path }}"
+  register: traefik_pods
+  retries: 15
+  delay: 5
+  until: >
+    (
+      traefik_pods.resources | default([]) | length > 0
+    ) and
+    (
+      traefik_pods.resources | default([]) |
+      selectattr('status.containerStatuses', 'defined') |
+      map(attribute='status.containerStatuses') |
+      map('first') |
+      map(attribute='ready') |
+      list
+    ) | min

@@ -1,0 +1,92 @@
+
+- name: "VSO App : Ensure namespace monitoring exists"
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    api_version: v1
+    kind: Namespace
+    name: monitoring
+    state: present
+
+# --- ÉTAPE AJOUTÉE : Déclarer l'adresse de ton Vault ---
+- name: "VSO App : Configure VaultConnection CRD"
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    state: present
+    definition:
+      apiVersion: secrets.hashicorp.com/v1beta1
+      kind: VaultConnection
+      metadata:
+        name: vault-connection-maptdp
+        namespace: monitoring
+      spec:
+        # L'URL de ton serveur Vault trouvée dans ton ancien SecretStore
+        address: "https://vault.jaffleman.tech"
+
+- name: "VSO App : Create ServiceAccount for Vault authentication"
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    state: present
+    definition:
+      apiVersion: v1
+      kind: ServiceAccount
+      metadata:
+        name: vso-grafana-sa
+        namespace: monitoring
+
+- name: "VSO App : Grant auth-delegator permissions to ServiceAccount"
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    state: present
+    definition:
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: ClusterRoleBinding
+      metadata:
+        name: "vso-auth-delegator-monitoring"
+      roleRef:
+        apiGroup: rbac.authorization.k8s.io
+        kind: ClusterRole
+        name: system:auth-delegator
+      subjects:
+        - kind: ServiceAccount
+          name: vso-grafana-sa
+          namespace: monitoring
+  
+
+- name: "VSO App : Configure VaultAuth CRD monitoring-auth"
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    state: present
+    definition:
+      apiVersion: secrets.hashicorp.com/v1beta1
+      kind: VaultAuth
+      metadata:
+        name: vault-jwt-auth
+        namespace: monitoring
+      spec:
+        # --- LIAISON NÉCESSAIRE ---
+        vaultConnectionRef: vault-connection-maptdp
+        method: kubernetes
+        mount: kubernetes
+        kubernetes:
+          role: grafana-role
+          serviceAccount: vso-grafana-sa
+
+- name: "VSO App : Configure VaultStaticSecret to generate monitoring-auth"
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    state: present
+    definition:
+      apiVersion: secrets.hashicorp.com/v1beta1
+      kind: VaultStaticSecret
+      metadata:
+        name: monitoring-secret-sync
+        namespace: monitoring
+      spec:
+        vaultAuthRef: vault-jwt-auth
+        mount: k3s
+        path: maptdp/grafana
+        type: kv-v2
+        refreshInterval: 5m
+        destination:
+          name: monitoring-auth
+          create: true

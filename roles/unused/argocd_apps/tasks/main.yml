@@ -1,0 +1,13 @@
+
+- name: Créer le namespace MapTDP
+  shell: >
+    k3s kubectl apply -f
+    {{ argocd_apps_repo_raw_base }}/{{ argocd_apps_repo_branch }}/deploy/infra/namespace-maptdp.yaml
+  changed_when: false
+
+- name: Bootstrapper les Applications Argo CD
+  shell: >
+    k3s kubectl apply -f
+    {{ argocd_apps_repo_raw_base }}/{{ argocd_apps_repo_branch }}/{{ argocd_apps_path }}/{{ item }}
+  loop: "{{ argocd_applications }}"
+  changed_when: false

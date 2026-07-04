@@ -1,0 +1,64 @@
+- name: add sealed secrets helm repo
+  ansible.builtin.command:
+    cmd: helm repo add sealed-secrets https://bitnami-labs.github.io/sealed-secrets
+  register: repo_add
+  failed_when: false
+  changed_when: "'already exists' not in repo_add.stderr"
+
+- name: update helm repos
+  ansible.builtin.command:
+    cmd: helm repo update
+  changed_when: false 
+
+- name: Install / Upgrade Sealed Secrets
+  ansible.builtin.command:
+    cmd: >
+      helm upgrade --install sealed-secrets sealed-secrets/sealed-secrets
+      --namespace kube-system
+      --version {{ sealed_secrets_chart_version }}
+      --set controller.create=true
+  environment:
+    KUBECONFIG: "{{ kubeconfig_path }}"
+  register: helm_result
+  failed_when: helm_result.rc != 0
+  changed_when: >
+    ('Release "sealed-secrets" has been upgraded' in helm_result.stdout)
+    or ('Release "sealed-secrets" does not exist' in helm_result.stdout)
+
+- name: Wait for Sealed Secrets rollout
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Pod
+    namespace: kube-system
+    label_selectors:
+      - app.kubernetes.io/name=sealed-secrets
+    kubeconfig: "{{ kubeconfig_path }}"
+  register: sealed_secrets_pods
+  retries: 15
+  delay: 5
+  until: >
+    (
+      sealed_secrets_pods.resources | default([]) | length > 0
+    ) and
+    (
+      sealed_secrets_pods.resources | default([]) |
+      selectattr('status.containerStatuses', 'defined') |
+      map(attribute='status.containerStatuses') |
+      map('first') |
+      map(attribute='ready') |
+      list
+    ) | min
+
+- name: Wait for Sealed Secrets controller to be ready
+  kubernetes.core.k8s_info:
+    api_version: apps/v1
+    kind: Deployment
+    namespace: kube-system
+    name: sealed-secrets
+    kubeconfig: "{{ kubeconfig_path }}"
+  register: sealed_secrets_deployment
+  retries: 15
+  delay: 5
+  until: >
+    sealed_secrets_deployment.resources | default([]) | length > 0 and
+    sealed_secrets_deployment.resources[0].status.readyReplicas == sealed_secrets_deployment.resources[0].status.replicas

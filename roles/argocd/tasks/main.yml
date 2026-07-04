@@ -1,0 +1,122 @@
+# -------------------------
+# HELM REPO
+# -------------------------
+
+- name: Add ArgoCD Helm repo
+  kubernetes.core.helm_repository:
+    name: argocd
+    repo_url: "{{ argocd_repo }}"
+  environment:
+    KUBECONFIG: "{{ kubeconfig_path }}"
+
+# -------------------------
+# INSTALL ARGOCD
+# -------------------------
+
+- name: Install / Upgrade ArgoCD
+  kubernetes.core.helm:
+    name: "{{ argocd_release }}"
+    chart_ref: "{{ argocd_chart }}"
+    chart_version: "{{ argocd_chart_version }}"
+    release_namespace: "{{ argocd_namespace }}"
+    create_namespace: true
+    state: present
+    update_repo_cache: true
+    wait: true
+    timeout: 300s
+    values: "{{ argocd_values | default({}) }}"
+  environment:
+    KUBECONFIG: "{{ kubeconfig_path }}"
+
+# -------------------------
+# WAIT ARGOCD READY
+# -------------------------
+
+- name: Wait ArgoCD server pods ready
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Pod
+    namespace: "{{ argocd_namespace }}"
+    label_selectors:
+      - app.kubernetes.io/name=argocd-server
+    kubeconfig: "{{ kubeconfig_path }}"
+  register: argocd_pods
+  retries: 20
+  delay: 5
+  until: >
+    (
+      argocd_pods.resources | default([]) | length > 0
+    ) and
+    (
+      argocd_pods.resources | default([]) |
+      selectattr('status.containerStatuses', 'defined') |
+      map(attribute='status.containerStatuses') |
+      map('first') |
+      map(attribute='ready') |
+      list
+    ) | min
+
+# -------------------------
+# CONFIG : MODE INSECURE (POUR TRAEFIK)
+# -------------------------
+
+- name: Configure ArgoCD insecure mode
+  kubernetes.core.k8s:
+    definition:
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: argocd-cmd-params-cm
+        namespace: "{{ argocd_namespace }}"
+      data:
+        server.insecure: "true"
+    merge_type: merge
+    kubeconfig: "{{ kubeconfig_path }}"
+
+# -------------------------
+# RESTART ARGOCD SERVER (IDEMPOTENT)
+# -------------------------
+
+- name: Restart argocd-server deployment
+  kubernetes.core.k8s:
+    api_version: apps/v1
+    kind: Deployment
+    name: argocd-server
+    namespace: "{{ argocd_namespace }}"
+    state: patched
+    definition:
+      spec:
+        template:
+          metadata:
+            annotations:
+              restartTimestamp: "{{ ansible_date_time.iso8601 }}"
+    kubeconfig: "{{ kubeconfig_path }}"
+
+# -------------------------
+# WAIT ROLLOUT
+# -------------------------
+
+- name: Wait for argocd-server rollout
+  kubernetes.core.k8s_info:
+    api_version: apps/v1
+    kind: Deployment
+    name: argocd-server
+    namespace: "{{ argocd_namespace }}"
+    kubeconfig: "{{ kubeconfig_path }}"
+  register: argocd_deploy
+  retries: 20
+  delay: 5
+  until: >
+    argocd_deploy.resources[0].status.readyReplicas is defined and
+    argocd_deploy.resources[0].status.replicas is defined and
+    argocd_deploy.resources[0].status.readyReplicas == argocd_deploy.resources[0].status.replicas
+
+# -------------------------
+# INGRESS
+# -------------------------
+
+- name: Deploy ArgoCD ingress
+  kubernetes.core.k8s:
+    state: present
+    definition: "{{ lookup('template', 'argocd-ingress.yaml.j2') }}"
+    kubeconfig: "{{ kubeconfig_path }}"
