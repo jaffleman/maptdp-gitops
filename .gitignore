@@ -1,0 +1,21 @@
+# Secrets
+*.env
+*.key
+*.pem
+*.crt
+
+# Ansible
+**/vault.yml
+**/vault.yaml
+
+# Kubernetes
+kubeconfig
+
+# AWS
+*.aws*
+
+# fichiers sensibles
+secrets.yml
+credentials.yml
+reviewer.jwt
+phoenix.log
