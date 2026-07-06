@@ -1,0 +1,38 @@
+# Terraform
+.terraform/
+.terraform.lock.hcl
+
+# State files
+*.tfstate
+*.tfstate.*
+terraform.tfstate
+terraform.tfstate.backup
+
+# Plans
+*.tfplan
+plan.out
+
+# Variables sensibles
+*.tfvars
+*.auto.tfvars
+
+# Logs
+crash.log
+crash.*.log
+
+# Secrets
+*.pem
+*.key
+*.p12
+*.pfx
+
+# AWS
+.aws/
+
+# Graphes générés
+tf-graph.dot
+*.svg
+*.png
+
+# Archives
+*.zip
