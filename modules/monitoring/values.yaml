@@ -1,0 +1,85 @@
+# ==================================================
+# kube-prometheus-stack
+# Prometheus + Grafana pour EKS
+# ==================================================
+
+# --------------------------------------------------
+# Grafana
+# --------------------------------------------------
+grafana:
+  enabled: true
+
+  adminUser: admin
+  adminPassword: admin123   # ⚠️ à sécuriser plus tard
+
+  service:
+    type: LoadBalancer
+
+  persistence:
+    enabled: true
+    storageClassName: gp3
+    size: 5Gi
+    accessModes:
+      - ReadWriteOnce
+
+  defaultDashboardsEnabled: true
+
+# --------------------------------------------------
+# Prometheus
+# --------------------------------------------------
+prometheus:
+  enabled: true
+
+  prometheusSpec:
+    retention: 7d
+
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: gp3
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 10Gi
+
+# --------------------------------------------------
+# Alertmanager
+# --------------------------------------------------
+alertmanager:
+  enabled: true
+
+  alertmanagerSpec:
+    storage:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: gp3
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 2Gi
+
+# --------------------------------------------------
+# Kubernetes components
+# --------------------------------------------------
+kubeStateMetrics:
+  enabled: true
+
+nodeExporter:
+  enabled: true
+
+kubelet:
+  enabled: true
+
+# --------------------------------------------------
+# RBAC & ServiceAccount
+# --------------------------------------------------
+rbac:
+  create: true
+
+serviceAccount:
+  create: true

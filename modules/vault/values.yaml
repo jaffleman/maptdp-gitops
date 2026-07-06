@@ -1,0 +1,11 @@
+server:
+  standalone:
+    enabled: true
+
+  dataStorage:
+    enabled: true
+    storageClass: gp3
+    size: 10Gi
+
+ui:
+  enabled: true
