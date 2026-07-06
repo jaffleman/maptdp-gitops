@@ -87,6 +87,7 @@ variable "enable_issuer" {
 variable "vault_role_id" {
   type      = string
   sensitive = true
+  default   = "17578af5-4c8d-86f2-6d8f-76b216aefd1b"
 }
 
 variable "vault_secret_id" {
