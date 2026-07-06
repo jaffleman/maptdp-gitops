@@ -18,7 +18,7 @@ variable "region" {
 variable "project_name" {
   description = "Nom du projet pour les tags"
   type        = string
-  default     = "mapttdp-project"
+  default     = "maptdp-project"
 }
 variable "environment" {
   description = "Environnement (dev|staging|prod)"
