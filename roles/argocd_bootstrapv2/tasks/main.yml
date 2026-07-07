@@ -11,7 +11,7 @@
   kubernetes.core.k8s:
     kubeconfig: "{{ kubeconfig_path }}"
     state: present
-    definition: "{{ lookup('file', '/home/jaffleman/ansible/root_app_dir/root-appv2.yaml') | from_yaml }}"
+    definition: "{{ lookup('file', '~/maptdp-gitops/root_app_dir/root-appv2.yaml') | from_yaml }}"
 
 - name: Wait for ArgoCD app 'root-appv2' to be Synced & Healthy
   kubernetes.core.k8s_info:
@@ -36,7 +36,7 @@
   kubernetes.core.k8s:
     kubeconfig: "{{ kubeconfig_path }}"
     state: present
-    definition: "{{ lookup('file', '/home/jaffleman/ansible/root_app_dir/root-app-maptdp-dev.yaml') | from_yaml }}"
+    definition: "{{ lookup('file', '~/maptdp-gitops/root_app_dir/root-app-maptdp-dev.yaml') | from_yaml }}"
 
 - name: Wait for ArgoCD app 'root-app-maptdp-dev' to be Synced & Healthy
   kubernetes.core.k8s_info:
@@ -57,7 +57,7 @@
   kubernetes.core.k8s:
     kubeconfig: "{{ kubeconfig_path }}"
     state: present
-    definition: "{{ lookup('file', '/home/jaffleman/ansible/root_app_dir/root-app-maptdp-staging.yaml') | from_yaml }}"
+    definition: "{{ lookup('file', '~/maptdp-gitops/root_app_dir/root-app-maptdp-staging.yaml') | from_yaml }}"
 
 - name: Wait for ArgoCD app 'root-app-maptdp-staging' to be Synced & Healthy
   kubernetes.core.k8s_info:

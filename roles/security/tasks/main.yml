@@ -229,7 +229,7 @@
 
 - name: Remove old SSH host key
   ansible.builtin.command: >
-    ssh-keygen -f "/home/jaffleman/.ssh/known_hosts" -R "[146.59.231.136]:63210"
+    ssh-keygen -f "~/.ssh/known_hosts" -R "[146.59.231.136]:63210"
   delegate_to: localhost
   become: false
 
