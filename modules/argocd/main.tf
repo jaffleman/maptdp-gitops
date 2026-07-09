@@ -53,6 +53,11 @@ resource "helm_release" "argocd" {
     yamlencode({
       server = {
         service = {
+          configs = {
+            params = {
+              "server.insecure" = "true"
+            }
+          }
           # ClusterIP si tu exposes via Traefik ; sinon, mets LoadBalancer
           type = "ClusterIP"
         }
@@ -64,4 +69,44 @@ resource "helm_release" "argocd" {
   depends_on = [
     kubernetes_namespace.argocd
   ]
+}
+resource "kubernetes_ingress_v1" "argocd" {
+  metadata {
+    name      = "argocd"
+    namespace = "argocd"
+
+    annotations = {
+      "cert-manager.io/cluster-issuer" = "letsencrypt-prod"
+    }
+  }
+
+  spec {
+    ingress_class_name = "traefik"
+
+    tls {
+      hosts       = ["argocd.jaffleman.tech"]
+      secret_name = "argocd-tls"
+    }
+
+    rule {
+      host = "argocd.jaffleman.tech"
+
+      http {
+        path {
+          path      = "/"
+          path_type = "Prefix"
+
+          backend {
+            service {
+              name = "argocd-server"
+
+              port {
+                number = 80
+              }
+            }
+          }
+        }
+      }
+    }
+  }
 }
