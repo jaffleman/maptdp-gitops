@@ -1,7 +1,7 @@
 replicaCount: 2
 
 ingress:
-  host: "api.staging.jaffleman.tech"
+  host: "api.jaffleman.tech"
 
 
 env:
