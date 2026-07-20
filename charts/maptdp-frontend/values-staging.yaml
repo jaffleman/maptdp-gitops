@@ -4,7 +4,7 @@ ingress:
   host: "maptdp.staging.jaffleman.tech"
 
 runtimeConfig:
-  apiBaseUrl: "https://api.staging.jaffleman.tech"
+  apiBaseUrl: "https://api.jaffleman.tech"
 env:
   - name: PORT
     value: "80"
