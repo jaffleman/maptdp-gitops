@@ -14,6 +14,9 @@ spec:
   jobTemplate:
     spec:
       template:
+        metadata:
+          labels:
+            app.kubernetes.io/component: backup
         spec:
           restartPolicy: OnFailure
 
