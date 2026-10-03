@@ -16,7 +16,7 @@ spec:
       template:
         metadata:
           labels:
-            app.kubernetes.io/component: backup
+            app.kubernetes.io
         spec:
           restartPolicy: OnFailure
 
