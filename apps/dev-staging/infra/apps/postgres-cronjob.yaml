@@ -23,7 +23,7 @@ spec:
           containers:
             - name: postgres-backup
 
-              image: docker.io/jaffleman971/postgres-backup:1.0
+              image: docker.io/jaffleman971/postgres-backup:1.1
               imagePullPolicy: IfNotPresent
 
               env:
