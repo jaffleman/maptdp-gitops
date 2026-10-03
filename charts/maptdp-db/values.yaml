@@ -29,6 +29,8 @@ networkPolicy:
   allowFromPodSelectors:
     - matchLabels:
         app.kubernetes.io/component: backend
+    - matchLabels:
+        app.kubernetes.io/component: backup
 
 imagePullSecrets: []
 
