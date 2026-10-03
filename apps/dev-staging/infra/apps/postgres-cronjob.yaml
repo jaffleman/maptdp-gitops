@@ -7,6 +7,7 @@ metadata:
 spec:
   schedule: "0 2 * * *"
   concurrencyPolicy: Forbid
+
   successfulJobsHistoryLimit: 3
   failedJobsHistoryLimit: 5
 
@@ -18,6 +19,7 @@ spec:
 
           containers:
             - name: postgres-backup
+
               image: docker.io/jaffleman971/postgres-backup:1.0
               imagePullPolicy: IfNotPresent
 
@@ -26,11 +28,14 @@ spec:
                 - name: PGHOST
                   value: maptdp-db
 
+                - name: PGPORT
+                  value: "5432"
+
                 - name: PGUSER
                   valueFrom:
                     secretKeyRef:
                       name: maptdp-db-auth
-                      key: username
+                      key: user
 
                 - name: PGPASSWORD
                   valueFrom:
@@ -42,7 +47,7 @@ spec:
                   valueFrom:
                     secretKeyRef:
                       name: maptdp-db-auth
-                      key: database
+                      key: db
 
                 # AWS S3
                 - name: AWS_ACCESS_KEY_ID
@@ -87,7 +92,7 @@ spec:
                   FILE="backup_${PGDATABASE}_${DATE}.sql.gz"
 
                   echo "==================================="
-                  echo "Verification de l'identite AWS"
+                  echo "Verification identite AWS"
                   echo "==================================="
 
                   aws sts get-caller-identity
@@ -98,6 +103,7 @@ spec:
 
                   pg_dump \
                     -h "${PGHOST}" \
+                    -p "${PGPORT}" \
                     -U "${PGUSER}" \
                     "${PGDATABASE}" \
                     | gzip > "/tmp/${FILE}"
