@@ -13,7 +13,7 @@ spec:
         kubectl:
           image:
             repository: docker.io/bitnami/kubectl
-            tag: "1.31.2"
+            tag: latest
         configuration:
           backupStorageLocation:
             - name: default
