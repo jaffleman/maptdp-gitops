@@ -1,0 +1,51 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: velero
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: 'https://vmware-tanzu.github.io/helm-charts'
+    targetRevision: 7.1.3
+    helm:
+      values: |
+        configuration:
+          backupStorageLocation:
+            - name: default
+              provider: aws
+              bucket: maptdp-database-489575506572-eu-west-3-an
+              prefix: k3s-cluster-backup
+              config:
+                region: eu-west-3
+          volumeSnapshotLocation:
+            - name: default
+              provider: aws
+              config:
+                region: eu-west-3
+        initContainers:
+          - name: velero-plugin-for-aws
+            image: velero/velero-plugin-for-aws:v1.10.0
+            imagePullPolicy: IfNotPresent
+            volumeMounts:
+              - mountPath: /target
+                name: plugins
+        credentials:
+          existingSecret: velero-s3-auth
+        serviceAccount:
+          server:
+            create: false
+            name: vso-velero-sa
+        schedules:
+          daily-backup:
+            schedule: "@daily"
+            template:
+              ttl: "240h"
+    chart: velero
+  destination:
+    server: 'https://kubernetes.default.svc'
+    namespace: velero
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
