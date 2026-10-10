@@ -16,8 +16,8 @@ spec:
       values: |
         kubectl:
           image:
-            repository: docker.io/bitnami/kubectl
-            tag: latest
+            repository: rancher/kubectl
+            tag: v1.36.2
 
         credentials:
           existingSecret: velero-s3-auth
