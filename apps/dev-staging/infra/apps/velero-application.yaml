@@ -5,51 +5,75 @@ metadata:
   namespace: argocd
 spec:
   project: default
+
   source:
-    repoURL: 'https://vmware-tanzu.github.io/helm-charts'
+    repoURL: https://vmware-tanzu.github.io/helm-charts
+    chart: velero
     targetRevision: 7.1.3
+
     helm:
       values: |
         kubectl:
           image:
             repository: docker.io/bitnami/kubectl
-            tag: latest
+            tag: "1.34.1"
+
+        credentials:
+          existingSecret: velero-s3-auth
+
+        serviceAccount:
+          server:
+            create: false
+            name: vso-velero-sa
+
         configuration:
           backupStorageLocation:
             - name: default
               provider: aws
               bucket: maptdp-database-489575506572-eu-west-3-an
               prefix: k3s-cluster-backup
+              default: true
               config:
                 region: eu-west-3
-          volumeSnapshotLocation:
-            - name: default
-              provider: aws
-              config:
-                region: eu-west-3
+                s3ForcePathStyle: false
+
+          defaultBackupStorageLocation: default
+
+          # Active la sauvegarde des volumes via Kopia/Restic
+          defaultVolumesToFsBackup: true
+
         initContainers:
           - name: velero-plugin-for-aws
             image: velero/velero-plugin-for-aws:v1.10.0
             imagePullPolicy: IfNotPresent
             volumeMounts:
-              - mountPath: /target
-                name: plugins
-        credentials:
-          existingSecret: velero-s3-auth
-        serviceAccount:
-          server:
-            create: false
-            name: vso-velero-sa
+              - name: plugins
+                mountPath: /target
+
         schedules:
           daily-backup:
-            schedule: "@daily"
+            schedule: "0 2 * * *"
             template:
-              ttl: "240h"
-    chart: velero
+              ttl: 240h
+              storageLocation: default
+
+              includedNamespaces:
+                - "*"
+
+              snapshotVolumes: false
+              defaultVolumesToFsBackup: true
+
+              includedResources:
+                - "*"
+
   destination:
-    server: 'https://kubernetes.default.svc'
+    server: https://kubernetes.default.svc
     namespace: velero
+
   syncPolicy:
     automated:
       prune: true
       selfHeal: true
+
+    syncOptions:
+      - CreateNamespace=true
