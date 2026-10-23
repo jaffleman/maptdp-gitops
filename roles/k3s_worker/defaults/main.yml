@@ -1,0 +1,8 @@
+# V3 - Nouveau rôle (TECH-01)
+# Token k3s fourni via --extra-vars, jamais dans Git :
+#   -e k3s_token=K10xxxxxxxx
+k3s_token: ""
+
+# Nom du nœud k3s ; surchargé dans l'inventaire (vps-ovh2 -> vps-2,
+# nom de nœud historique conservé, cf. PREUVE-012)
+k3s_node_name: "{{ inventory_hostname }}"

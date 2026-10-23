@@ -36,7 +36,8 @@ Options:
 
 Notes:
   Si --role-id n'est pas fourni (et que le mode inclut Ansible),
-  le script le demandera de façon interactive.
+  le script le demandera de façon interactive (V3 : plus aucune
+  valeur par défaut codée en dur).
 
 Examples:
   ./phoenix.sh
@@ -123,6 +124,9 @@ if [[ "$MODE" == "full" || "$MODE" == "clean" ]]; then
     exit 1
   fi
   # shellcheck source=/dev/null
+  # V3 (audit TECH-01) : clean_vps.sh est NON VERSIONNÉ (hors dépôt).
+  # Point faible documenté : sa sauvegarde/revue reste à la charge de
+  # l'opérateur.
   source "$HOME/lib/clean_vps.sh"
 
   if ! declare -f clean_vps >/dev/null; then
@@ -172,13 +176,15 @@ fi
 # -------------------------
 # DEMANDE INTERACTIVE DU ROLE_ID / SECRET_ID
 # -------------------------
-DEFAULT_ROLE_ID="5e295cf4-d749-4518-8342-3b723f642501"
+# V3 (audit TECH-01, constat C14) : le role_id n'est plus codé en dur
+# dans le script (identifiant sensible en clair dans Git). Il doit
+# être fourni via --role-id ou saisi interactivement.
 
 if [[ -z "$ROLE_ID" ]]; then
-  read -r -p "🔑 Entrez le Vault role_id [Entrée = défaut: $DEFAULT_ROLE_ID]: " ROLE_ID
+  read -r -p "🔑 Entrez le Vault role_id : " ROLE_ID
   if [[ -z "$ROLE_ID" ]]; then
-    ROLE_ID="$DEFAULT_ROLE_ID"
-    echo "ℹ️  Utilisation du role_id par défaut."
+    echo "❌ Le role_id est obligatoire."
+    exit 1
   fi
 fi
 

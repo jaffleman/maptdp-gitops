@@ -1,42 +1,14 @@
-- name: Bootstrap Kubernetes + ArgoCD + Vault integration
-  hosts: k3s_nodes
-  become: true
-
-  vars_files:
-    - ../../credentials.yml   # 🔐 chiffré avec Ansible Vault
-
-  vars:
-    kubeconfig_path: /etc/rancher/k3s/k3s.yaml
-
-  roles:
-    # 🔐 Sécurité système
-    - role: ssh_hardening
-      tags: [ssh, security]
-
-    # Pré-requis système
-    - role: k3s_prereqs
-      tags: [k3s, prereqs]
-
-    # ⚙️ Installation cluster K3s
-    - role: k3s_server
-      tags: [k3s]
-
-    # Installation de python
-    - role: python_prereqs
-      tags: [pip]
-
-    # 📦 Installation Helm
-    - role: helm
-      tags: [helm]
-
-    # 🚀 Installation ArgoCD
-    - role: argocd
-      tags: [argocd]
-
-    # 🔐 Injection des secrets Vault (TRÈS IMPORTANT ici)
-    - role: vault
-      tags: [vault, secrets]
-
-    # 🚀 Bootstrap GitOps (attente + root-app)
-    - role: argocd_bootstrapv2
-      tags: [argocd, bootstrap]
+# V3 - Correctifs TECH-01 (audit du 2026-10-23)
+# Constat C15 : ce playbook était MORT : rôle ssh_hardening inexistant,
+# rôle vault rangé dans unused/, vars_files ../../credentials.yml hors
+# dépôt. Le playbook de référence est playbooks/k3s_platform.yml.
+# Ce stub échoue explicitement pour empêcher toute utilisation
+# accidentelle. À supprimer après merge de la V3.
+- name: "OBSOLÈTE : utiliser playbooks/k3s_platform.yml"
+  hosts: all
+  tasks:
+    - name: Échec explicite
+      ansible.builtin.fail:
+        msg: >-
+          Ce playbook est obsolète (correctifs TECH-01 V3).
+          Utiliser playbooks/k3s_platform.yml.
