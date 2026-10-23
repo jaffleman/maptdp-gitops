@@ -1,29 +1,34 @@
+# V3 - Correctifs TECH-01 (audit du 2026-10-23) :
+#   - C4  : la tâche debug qui affichait le client_token est SUPPRIMÉE
+#           (le token transitait en clair dans la sortie console et
+#           phoenix.log) ; no_log ajouté sur le login AppRole.
+#   - C11 : kubernetes_host ne cible plus l'IP publique codée en dur
+#           (146.59.231.136:6443) mais l'IP Tailscale du control-plane
+#           ({{ k3s_control_plane_ip }}), le 6443 n'étant plus exposé
+#           au public (C1).
+#   - slurp du CA : become: true explicite (la lecture exige root).
+
 - name: "Vault : Authentification temporaire via AppRole"
   ansible.builtin.uri:
     url: "https://vault.jaffleman.tech/v1/auth/approle/login"
     method: POST
     body_format: json
     body:
-      role_id: "{{ vault_ansible_role_id }}"     
-      secret_id: "{{ vault_ansible_secret_id }}" 
+      role_id: "{{ vault_ansible_role_id }}"
+      secret_id: "{{ vault_ansible_secret_id }}"
   register: vault_login
+  no_log: true
   delegate_to: localhost
   connection: local
   become: false
   vars:
     ansible_become: false
 
-
-- name: "Vault : Debug - afficher le token"
-  ansible.builtin.debug:
-    msg: "{{ vault_login.json.auth.client_token }}"
-
-
 - name: Récupérer le certificat CA depuis le VPS distant
   ansible.builtin.slurp:
     src: /var/lib/rancher/k3s/server/tls/server-ca.crt
   register: k3s_ca_encoded
-  # become: true # Ajoutez ceci si l'utilisateur Ansible a besoin de root pour lire le certificat
+  become: true
 
 - name: "Vault : Mise à jour automatique du CA K3s"
   ansible.builtin.uri:
@@ -33,7 +38,7 @@
       X-Vault-Token: "{{ vault_login.json.auth.client_token }}"
     body_format: json
     body:
-      kubernetes_host: "https://146.59.231.136:6443"
+      kubernetes_host: "https://{{ k3s_control_plane_ip }}:6443"
       disable_iss_validation: true
       disable_local_ca_jwt: true
       kubernetes_ca_cert: "{{ k3s_ca_encoded['content'] | b64decode }}"
