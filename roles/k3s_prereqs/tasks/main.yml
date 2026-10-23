@@ -10,19 +10,16 @@
   loop: "{{ ufw_allowed_ports }}"
 
 # -------------------------
-# FIREWALL - K3S
-# -------------------------
-
-- name: Autoriser les ports K3s
-  ufw:
-    rule: allow
-    port: "{{ item.port }}"
-    proto: "{{ item.proto }}"
-  loop: "{{ k3s_ports }}"
-
-# -------------------------
 # FIREWALL - PORTS EXTRA
 # -------------------------
+
+# V3 (constat C1 de l'audit TECH-01) : la boucle k3s_ports qui ouvrait
+# 6443/tcp, 10250/tcp et 8472/udp au public est SUPPRIMÉE.
+# Ces ports ne doivent être accessibles que via le tailnet : voir le
+# rôle tailscale_ufw (allow in sur tailscale0 + deny publics).
+# Si un port public supplémentaire est réellement nécessaire (p.ex.
+# NodePort), l'ouvrir explicitement et à justification :
+#   -e 'ufw_extra_ports=[{port: 30080, proto: tcp}]'
 
 - name: Autoriser les ports supplémentaires
   ufw:

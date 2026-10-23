@@ -1,3 +1,9 @@
+# V3 - Correctifs TECH-01 (audit du 2026-10-23)
+# Constat C2 : le port 22 figurait dans ufw_allowed_ports ; l'allow était
+# inséré AVANT le deny 22, et la précédence UFW rendait le deny inopérant.
+# Le 22 est retiré : sa gestion (allow temporaire -> suppression -> deny)
+# est désormais explicite dans tasks/main.yml.
+
 ssh_user: ubuntu
 ssh_port: 63210
 
@@ -6,4 +12,16 @@ ssh_pubkey_path: "{{ lookup('env','HOME') + '/.ssh/ansible_ed25519.pub' }}"
 ufw_allowed_ports:
   - { port: 80, proto: tcp }
   - { port: 443, proto: tcp }
-  - { port: 22, proto: tcp }
+
+# V3 - Constat C13 : ignoreip n'inclut plus l'IP admin en dur dans Git.
+# Surcharge ponctuelle si besoin :
+#   -e fail2ban_ignoreip="127.0.0.1/8 ::1 86.246.10.119"
+fail2ban_ignoreip: "127.0.0.1/8 ::1"
+fail2ban_maxretry: 5
+fail2ban_findtime: "10m"
+fail2ban_bantime: "24h"
+
+# V3 - Constat C12 : 120 s se sont avérées trop courtes pour le reboot.
+reboot_timeout: 600
+reboot_connect_timeout: 10
+wait_port_timeout: 180
