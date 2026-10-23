@@ -1,0 +1,5 @@
+# V3 - Nouveau rôle (TECH-01, audit du 2026-10-23)
+# Enrôlement Tailscale + fermeture publique des ports du cluster.
+# L'authkey est TOUJOURS fournie via --extra-vars (jamais dans Git) :
+#   -e tailscale_auth_key=tskey-auth-xxxxxxxx
+tailscale_auth_key: ""

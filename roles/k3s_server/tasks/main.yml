@@ -1,3 +1,35 @@
+# V3 - Correctifs TECH-01 (audit du 2026-10-23) :
+#   - C7  : secrets-encryption activé AVANT l'installation k3s
+#           (/etc/rancher/k3s/config.yaml) + contrôle post-installation
+#   - C8  : /etc/rancher/k3s/k3s.yaml en 0600 (était 0644)
+#   - C9  : la copie kubeconfig était un no-op : le playbook définissait
+#           kubeconfig_path = /etc/rancher/k3s/k3s.yaml (src = dest).
+#           Le var est supprimé du playbook : la copie réelle
+#           /etc/rancher/k3s/k3s.yaml -> {{ kubeconfig_path }} (0600,
+#           utilisateur {{ kube_user }}) fonctionne désormais.
+#   - C10 : la bascule 127.0.0.1 -> IP publique est SUPPRIMÉE : le
+#           kubeconfig est basculé vers l'IP Tailscale par le rôle
+#           tailscale_ufw, APRÈS validation du tailnet (anti-lockout).
+
+# -------------------------
+# PRÉ-REQUIS
+# -------------------------
+
+- name: Créer le répertoire de configuration k3s
+  ansible.builtin.file:
+    path: /etc/rancher/k3s
+    state: directory
+    mode: '0755'
+
+# V3 (C7) : écrit AVANT l'installation pour que k3s démarre directement
+# avec le chiffrement des secrets etcd (pas de redémarrage requis).
+- name: Activer le chiffrement des secrets k3s (secrets-encryption)
+  ansible.builtin.copy:
+    dest: /etc/rancher/k3s/config.yaml
+    mode: '0600'
+    content: |
+      secrets-encryption: true
+
 # -------------------------
 # INSTALLATION K3S
 # -------------------------
@@ -25,6 +57,13 @@
   delay: 5
   until: k3s_status.rc == 0
 
+# V3 (C7) : contrôle que le chiffrement des secrets est bien actif.
+- name: Vérifier que le chiffrement des secrets est actif
+  command: k3s secrets-encrypt status
+  register: secrets_encrypt_status
+  changed_when: false
+  failed_when: secrets_encrypt_status.rc != 0 or 'disabled' in (secrets_encrypt_status.stdout | lower)
+
 # -------------------------
 # KUBECONFIG
 # -------------------------
@@ -44,16 +83,12 @@
     mode: '0600'
     remote_src: true
 
-- name: Fix kubeconfig permissions
+# V3 (C8) : le kubeconfig serveur contient les credentials admin du
+# cluster : 0644 était trop permissif.
+- name: Restreindre les permissions du kubeconfig serveur (0600)
   ansible.builtin.file:
     path: /etc/rancher/k3s/k3s.yaml
-    mode: '0644'
-
-- name: Remplacer localhost par IP publique dans kubeconfig
-  replace:
-    path: "{{ kubeconfig_path }}"
-    regexp: '127.0.0.1'
-    replace: "{{ ansible_host }}"
+    mode: '0600'
 
 # -------------------------
 # EXPORT KUBECONFIG
