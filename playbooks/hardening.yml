@@ -1,5 +1,9 @@
+# V3 - Correctifs TECH-01 (audit du 2026-10-23)
+# Constat C15 : le rôle ssh_hardening référencé ici n'existe pas dans
+# le dépôt (le rôle de durcissement est roles/security). Le playbook
+# échouait donc systématiquement. Correction : rôle security.
 - name: Hardening de base du VPS Ubuntu
   hosts: all
   become: true
   roles:
-    - ssh_hardening
+    - security

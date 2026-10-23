@@ -1,0 +1,63 @@
+# V3 - Nouveau playbook (TECH-01) : bootstrap du worker k3s (vps-2).
+# Usage :
+#   ansible-playbook playbooks/k3s_worker.yml \
+#     -e tailscale_auth_key=tskey-auth-xxxx \
+#     -e k3s_token=K10xxxxxxxx
+# Le token k3s se récupère sur le control-plane :
+#   sudo cat /var/lib/rancher/k3s/server/node-token
+# Si le worker est encore sur le port SSH 22 (jamais durci), ajouter
+# -e ansible_port=22 ; après durcissement, décommenter ansible_port
+# dans l'inventaire.
+- name: Bootstrap du worker k3s (agent)
+  hosts: k3s_workers
+  become: true
+  any_errors_fatal: true
+
+  pre_tasks:
+
+    - name: Wait for apt lock to be released
+      ansible.builtin.shell: |
+        while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; do
+          echo "Waiting for apt lock..."
+          sleep 5
+        done
+      changed_when: false
+
+    - name: Ensure python3-venv is installed
+      ansible.builtin.apt:
+        name: python3-venv
+        state: present
+        update_cache: yes
+        lock_timeout: 300
+      register: apt_result
+      retries: 5
+      delay: 15
+      until: apt_result is succeeded
+
+    - name: Create virtualenv for Ansible
+      ansible.builtin.command:
+        cmd: python3 -m venv /opt/ansible-venv
+      args:
+        creates: /opt/ansible-venv/bin/python
+
+    - name: Set ansible Python interpreter
+      ansible.builtin.set_fact:
+        ansible_python_interpreter: /opt/ansible-venv/bin/python
+
+  roles:
+
+    # 🔐 Security baseline (durcissement SSH + UFW du worker)
+    - { role: security, tags: [security] }
+
+    # 🐍 Runtime
+    - { role: python_prereqs, tags: [runtime] }
+
+    # ⚙️ Pré-requis (aucun port cluster au public)
+    - { role: k3s_prereqs, tags: [k3s] }
+
+    # 🔒 Tailscale + fermeture publique des ports cluster
+    # (l'agent joint le control-plane via l'IP Tailscale)
+    - { role: tailscale_ufw, tags: [tailscale] }
+
+    # 🧩 Agent k3s (token via --extra-vars)
+    - { role: k3s_worker, tags: [k3s] }

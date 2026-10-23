@@ -1,0 +1,76 @@
+# V3 - Nouveau rôle (TECH-01) : agent k3s sur le worker.
+# Le token est fourni via --extra-vars (jamais dans Git) :
+#   sudo cat /var/lib/rancher/k3s/server/node-token   (sur le control-plane)
+#   -e k3s_token=K10xxxx
+# L'URL du control-plane utilise l'IP Tailscale (6443 non public).
+
+# -------------------------
+# CONTRÔLE PRÉALABLE
+# -------------------------
+
+- name: Vérifier que le token k3s et l'IP du control-plane sont fournis
+  ansible.builtin.assert:
+    that:
+      - k3s_token | length > 0
+      - k3s_control_plane_ip | length > 0
+    fail_msg: >-
+      k3s_token manquant (--extra-vars) et/ou k3s_control_plane_ip
+      absent de group_vars/all.yml.
+
+# -------------------------
+# INSTALLATION K3S (AGENT)
+# -------------------------
+
+- name: Vérifier si k3s est déjà installé
+  ansible.builtin.command: which k3s
+  register: k3s_bin
+  failed_when: false
+  changed_when: false
+
+- name: Télécharger script d'installation k3s
+  ansible.builtin.get_url:
+    url: https://get.k3s.io
+    dest: /tmp/k3s_install.sh
+    mode: '0755'
+  when: k3s_bin.rc != 0
+
+- name: Installer l'agent k3s (rejoint le control-plane via le tailnet)
+  ansible.builtin.shell: |
+    INSTALL_K3S_EXEC="agent" \
+    K3S_URL="https://{{ k3s_control_plane_ip }}:6443" \
+    K3S_TOKEN="{{ k3s_token }}" \
+    K3S_NODE_NAME="{{ k3s_node_name }}" \
+    sh /tmp/k3s_install.sh
+  args:
+    creates: /usr/local/bin/k3s
+  no_log: true
+
+- name: Activer et démarrer l'agent k3s
+  ansible.builtin.systemd:
+    name: k3s-agent
+    state: started
+    enabled: true
+
+# -------------------------
+# ATTENTE VUE DU CONTROL-PLANE
+# -------------------------
+
+- name: Attendre que le nœud soit Ready vu du control-plane
+  ansible.builtin.command: >
+    k3s kubectl get node {{ k3s_node_name }}
+    -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}'
+  register: worker_ready
+  delegate_to: "{{ groups['k3s_servers'][0] }}"
+  become: true
+  changed_when: false
+  until: worker_ready.stdout == "True"
+  retries: 30
+  delay: 10
+
+- name: Labeliser le nœud en worker
+  ansible.builtin.command: >
+    k3s kubectl label node {{ k3s_node_name }}
+    node-role.kubernetes.io/worker=worker --overwrite
+  delegate_to: "{{ groups['k3s_servers'][0] }}"
+  become: true
+  changed_when: false
