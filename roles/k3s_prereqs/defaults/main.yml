@@ -1,11 +1,12 @@
+# V3 - Correctifs TECH-01 (audit du 2026-10-23)
+# Constat C1 : la liste k3s_ports (6443/10250/8472) ouvrait l'API
+# Kubernetes, kubelet et flannel AU PUBLIC. Elle est supprimée :
+# l'accès au cluster passe exclusivement par Tailscale (rôle
+# tailscale_ufw : allow in sur tailscale0, deny publics).
+
 ufw_allowed_ports:
   - { port: "{{ ssh_port }}", proto: tcp }
   - { port: 80, proto: tcp }
   - { port: 443, proto: tcp }
-
-k3s_ports:
-  - { port: 6443, proto: tcp }
-  - { port: 10250, proto: tcp }
-  - { port: 8472, proto: udp }
 
 ufw_extra_ports: []
