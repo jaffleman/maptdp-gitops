@@ -7,10 +7,14 @@
 #           ({{ k3s_control_plane_ip }}), le 6443 n'étant plus exposé
 #           au public (C1).
 #   - slurp du CA : become: true explicite (la lecture exige root).
+# Bascule du 24/10/2026 : l'URL Vault ne cible plus le https public
+# (https://vault.jaffleman.tech, cassé par la panne Freebox du 20/10)
+# mais {{ vault_addr }} (group_vars/all.yml), accès Vault via le
+# tailnet chiffré WireGuard.
 
 - name: "Vault : Authentification temporaire via AppRole"
   ansible.builtin.uri:
-    url: "https://vault.jaffleman.tech/v1/auth/approle/login"
+    url: "{{ vault_addr }}/v1/auth/approle/login"
     method: POST
     body_format: json
     body:
@@ -32,7 +36,7 @@
 
 - name: "Vault : Mise à jour automatique du CA K3s"
   ansible.builtin.uri:
-    url: "https://vault.jaffleman.tech/v1/auth/kubernetes/config"
+    url: "{{ vault_addr }}/v1/auth/kubernetes/config"
     method: POST
     headers:
       X-Vault-Token: "{{ vault_login.json.auth.client_token }}"
