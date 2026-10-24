@@ -10,6 +10,18 @@
 #   - C10 : la bascule 127.0.0.1 -> IP publique est SUPPRIMÉE : le
 #           kubeconfig est basculé vers l'IP Tailscale par le rôle
 #           tailscale_ufw, APRÈS validation du tailnet (anti-lockout).
+#   - C19 : tls-san ajouté avec l'IP Tailscale du control-plane. Sans
+#           lui, le certificat serving de l'API n'inclut pas l'IP du
+#           tailnet et TOUTE validation TLS via tailnet échoue (kubectl
+#           via kubeconfig basculé, TokenReview Vault/VSO). Constat
+#           issu de l'incident du 24/10/2026 : auth kubernetes Vault
+#           en 403 car le TokenReview vers l'IP tailnet échouait en
+#           vérification de certificat (SAN manquant).
+#           NOTE PRA : si le VPS1 réenrôlé reçoit une IP Tailscale
+#           différente de {{ k3s_control_plane_ip }}, le rôle
+#           tailscale_ufw doit mettre à jour tls-san et faire
+#           régénérer le certificat (restart k3s) AVANT la bascule
+#           kubeconfig.
 
 # -------------------------
 # PRÉ-REQUIS
@@ -23,12 +35,16 @@
 
 # V3 (C7) : écrit AVANT l'installation pour que k3s démarre directement
 # avec le chiffrement des secrets etcd (pas de redémarrage requis).
-- name: Activer le chiffrement des secrets k3s (secrets-encryption)
+# V3 (C19) : tls-san = IP Tailscale du control-plane pour que le
+# certificat serving de l'API couvre l'accès via le tailnet.
+- name: Activer le chiffrement des secrets k3s (secrets-encryption + tls-san)
   ansible.builtin.copy:
     dest: /etc/rancher/k3s/config.yaml
     mode: '0600'
     content: |
       secrets-encryption: true
+      tls-san:
+        - "{{ k3s_control_plane_ip }}"
 
 # -------------------------
 # INSTALLATION K3S
