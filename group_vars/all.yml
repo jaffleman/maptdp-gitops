@@ -22,6 +22,12 @@ kubeconfig_path: "/home/{{ ssh_user }}/.kube/config"
 # le run en cours — ajuster ce fichier si l'IP change définitivement.
 k3s_control_plane_ip: "100.89.84.16"
 
+# Adresse Vault via le tailnet (bascule du 24/10/2026) : le chemin
+# public https (Freebox/Caddy) est cassé depuis le 20/10 ; le cluster
+# consomme déjà Vault via le tailnet (VaultConnection GitOps). Le
+# trafic tailnet est chiffré de bout en bout par WireGuard.
+vault_addr: "http://100.91.75.58:8200"
+
 # fail2ban : IP admin à ajouter ponctuellement via
 #   -e fail2ban_ignoreip="127.0.0.1/8 ::1 86.246.10.119"
 fail2ban_ignoreip: "127.0.0.1/8 ::1"
