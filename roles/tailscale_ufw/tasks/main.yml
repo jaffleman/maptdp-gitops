@@ -4,8 +4,14 @@
 #   2) bascule du kubeconfig vers l'IP Tailscale
 #   3) validation kubectl de bout en bout via le tailnet
 #   4) SEULEMENT ENSUITE fermeture publique de 6443/10250/8472
+#   5) activation EXPLICITE d'UFW (state: enabled)
 # Avec any_errors_fatal (playbook), toute erreur avant l'étape 4
 # interrompt le playbook AVANT que les ports publics ne soient fermés.
+#
+# Correctif du 25/10/2026 (incident CHG-2026-10-20-TAILNET-VSO) :
+# le worker était resté avec des règles UFW posées mais un pare-feu
+# INACTIF pendant 5 jours (aucun état "enabled" dans ce rôle). L'étape 5
+# rend l'activation explicite et idempotente.
 
 # -------------------------
 # CONTRÔLE PRÉALABLE
@@ -131,6 +137,13 @@
     rule: deny
     port: '8472'
     proto: udp
+
+# Correctif du 25/10/2026 (CHG-2026-10-20-TAILNET-VSO) : sans cette
+# étape, les règles ci-dessus peuvent être posées sur un UFW inactif
+# (machine "protégée" en apparence, pare-feu éteint en réalité).
+- name: Activer UFW (règles appliquées + persistance au démarrage)
+  community.general.ufw:
+    state: enabled
 
 - name: Recharger UFW
   community.general.ufw:
