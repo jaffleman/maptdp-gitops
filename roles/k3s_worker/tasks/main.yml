@@ -3,6 +3,14 @@
 #   sudo cat /var/lib/rancher/k3s/server/node-token   (sur le control-plane)
 #   -e k3s_token=K10xxxx
 # L'URL du control-plane utilise l'IP Tailscale (6443 non public).
+#
+# Correctif du 25/10/2026 (incident CHG-2026-10-20-TAILNET-VSO) :
+# l'agent enrôlé le 20/10 sans node-ip/flannel-iface publiait son IP
+# PUBLIQUE ; la fermeture UFW inter-nœuds a alors partitionné le
+# cluster (CP->worker 10250 KO, flannel inter-nœuds coupé, VSO et
+# dumps PG en échec). Le config.yaml est désormais écrit AVANT
+# l'installation de l'agent — état aligné sur la réparation manuelle
+# validée le 25/10 (config.yaml worker : node-ip + flannel-iface).
 
 # -------------------------
 # CONTRÔLE PRÉALABLE
@@ -16,6 +24,30 @@
     fail_msg: >-
       k3s_token manquant (--extra-vars) et/ou k3s_control_plane_ip
       absent de group_vars/all.yml.
+
+# -------------------------
+# CONFIGURATION RÉSEAU DE L'AGENT (avant installation)
+# -------------------------
+
+- name: Récupérer l'IP Tailscale du worker
+  ansible.builtin.command: tailscale ip -4
+  register: worker_tailscale_ip
+  changed_when: false
+
+- name: Créer le répertoire de configuration k3s
+  ansible.builtin.file:
+    path: /etc/rancher/k3s
+    state: directory
+    mode: '0755'
+
+- name: Épingler l'agent sur le tailnet (node-ip + flannel-iface)
+  ansible.builtin.copy:
+    dest: /etc/rancher/k3s/config.yaml
+    mode: '0600'
+    content: |
+      node-ip: {{ worker_tailscale_ip.stdout | trim }}
+      flannel-iface: tailscale0
+  register: k3s_worker_config
 
 # -------------------------
 # INSTALLATION K3S (AGENT)
@@ -50,6 +82,16 @@
     name: k3s-agent
     state: started
     enabled: true
+
+# Correctif du 25/10/2026 : sur un re-run (worker déjà enrôlé), la
+# modification de config.yaml ne prend effet qu'après restart de
+# l'agent. Le worker de prod est déjà conforme (appliqué à chaud le
+# 25/10) -> pas de restart lors du prochain run.
+- name: Redémarrer l'agent si la configuration a changé (re-runs)
+  ansible.builtin.systemd:
+    name: k3s-agent
+    state: restarted
+  when: k3s_worker_config is changed
 
 # -------------------------
 # ATTENTE VUE DU CONTROL-PLANE
