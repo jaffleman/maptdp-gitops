@@ -45,7 +45,7 @@
   failed_when: false
   changed_when: false
 
-- name: Enrôler le nœud dans le tailnet (no_log : authkey jamais journalisée)
+- name: "Enrôler le nœud dans le tailnet (no_log : authkey jamais journalisée)"
   ansible.builtin.command: >
     tailscale up
     --auth-key={{ tailscale_auth_key }}
