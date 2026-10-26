@@ -22,6 +22,12 @@
 #           tailscale_ufw doit mettre à jour tls-san et faire
 #           régénérer le certificat (restart k3s) AVANT la bascule
 #           kubeconfig.
+#   - C20 (25/10/2026, incident CHG-2026-10-20-TAILNET-VSO) :
+#           node-ip + flannel-iface ajoutés au config.yaml. Sans eux,
+#           le nœud publie son IP publique et la fermeture UFW
+#           inter-nœuds partitionne le cluster. État aligné sur le
+#           config.yaml VPS1 complété à chaud le 25/10 (validé :
+#           ping CP->worker 3/3, VSO 12/12 SYNCED).
 
 # -------------------------
 # PRÉ-REQUIS
@@ -37,7 +43,9 @@
 # avec le chiffrement des secrets etcd (pas de redémarrage requis).
 # V3 (C19) : tls-san = IP Tailscale du control-plane pour que le
 # certificat serving de l'API couvre l'accès via le tailnet.
-- name: Activer le chiffrement des secrets k3s (secrets-encryption + tls-san)
+# V3 (C20) : node-ip + flannel-iface = le nœud (et flannel) s'annoncent
+# sur l'IP du tailnet, jamais sur l'IP publique.
+- name: Épingler k3s sur le tailnet (secrets-encryption, tls-san, node-ip, flannel-iface)
   ansible.builtin.copy:
     dest: /etc/rancher/k3s/config.yaml
     mode: '0600'
@@ -45,6 +53,9 @@
       secrets-encryption: true
       tls-san:
         - "{{ k3s_control_plane_ip }}"
+      node-ip: "{{ k3s_control_plane_ip }}"
+      flannel-iface: tailscale0
+  register: k3s_server_config
 
 # -------------------------
 # INSTALLATION K3S
@@ -61,6 +72,16 @@
     INSTALL_K3S_EXEC="--disable=traefik" sh /tmp/k3s_install.sh
   args:
     creates: /usr/local/bin/k3s
+
+# V3 (C20) : sur un re-run (PRA ou config modifiée), la modification
+# de config.yaml ne prend effet qu'après restart de k3s. Le config.yaml
+# du VPS1 de prod est déjà conforme (complété à chaud le 25/10) ->
+# pas de restart lors du prochain run.
+- name: Redémarrer k3s si la configuration a changé (re-runs)
+  ansible.builtin.systemd:
+    name: k3s
+    state: restarted
+  when: k3s_server_config is changed
 
 # -------------------------
 # ATTENTE DU CLUSTER
