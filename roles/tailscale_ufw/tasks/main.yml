@@ -91,7 +91,9 @@
     path: "{{ kubeconfig_path }}"
     regexp: '127\.0\.0\.1'
     replace: "{{ k3s_control_plane_ip }}"
-  when: kubeconfig_file.stat.exists
+  # 26/10 : kubeconfig = control-plane uniquement. Un kubeconfig trouvé
+  # sur un worker (ex. vestige EKS) ne doit ni être modifié ni validé.
+  when: kubeconfig_file.stat.exists and 'k3s_servers' in group_names
 
 # -------------------------
 # VALIDATION VIA LE TAILNET (avant toute fermeture publique)
@@ -108,7 +110,7 @@
   retries: 3
   delay: 10
   changed_when: false
-  when: kubeconfig_file.stat.exists
+  when: kubeconfig_file.stat.exists and 'k3s_servers' in group_names
 
 # -------------------------
 # FERMETURE PUBLIQUE DES PORTS CLUSTER (après validation uniquement)
