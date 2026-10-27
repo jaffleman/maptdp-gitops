@@ -1,0 +1,152 @@
+# V3 - Nouveau rôle (TECH-01, audit du 2026-10-23)
+# Ordre anti-lockout strict :
+#   1) installation + enrôlement Tailscale (authkey via --extra-vars)
+#   2) bascule du kubeconfig vers l'IP Tailscale
+#   3) validation kubectl de bout en bout via le tailnet
+#   4) SEULEMENT ENSUITE fermeture publique de 6443/10250/8472
+#   5) activation EXPLICITE d'UFW (state: enabled)
+# Avec any_errors_fatal (playbook), toute erreur avant l'étape 4
+# interrompt le playbook AVANT que les ports publics ne soient fermés.
+#
+# Correctif du 25/10/2026 (incident CHG-2026-10-20-TAILNET-VSO) :
+# le worker était resté avec des règles UFW posées mais un pare-feu
+# INACTIF pendant 5 jours (aucun état "enabled" dans ce rôle). L'étape 5
+# rend l'activation explicite et idempotente.
+
+# -------------------------
+# CONTRÔLE PRÉALABLE
+# -------------------------
+
+- name: Vérifier que l'authkey Tailscale est fournie
+  ansible.builtin.assert:
+    that:
+      - tailscale_auth_key | length > 0
+    fail_msg: >-
+      tailscale_auth_key manquant. Fournir via --extra-vars :
+      -e tailscale_auth_key=tskey-auth-xxxx (jamais dans Git).
+
+# -------------------------
+# INSTALLATION + ENRÔLEMENT
+# -------------------------
+
+- name: Vérifier si Tailscale est installé
+  ansible.builtin.command: which tailscale
+  register: tailscale_bin
+  failed_when: false
+  changed_when: false
+
+- name: Installer Tailscale
+  ansible.builtin.shell: curl -fsSL https://tailscale.com/install.sh | sh
+  when: tailscale_bin.rc != 0
+
+- name: Vérifier si le nœud est déjà enrôlé
+  ansible.builtin.command: tailscale status
+  register: tailscale_status
+  failed_when: false
+  changed_when: false
+
+- name: "Enrôler le nœud dans le tailnet (no_log : authkey jamais journalisée)"
+  ansible.builtin.command: >
+    tailscale up
+    --auth-key={{ tailscale_auth_key }}
+    --hostname={{ inventory_hostname }}
+    --accept-dns=false
+  when: tailscale_status.rc != 0
+  no_log: true
+
+- name: Attendre l'interface tailscale0
+  ansible.builtin.wait_for:
+    path: /sys/class/net/tailscale0
+    state: present
+    timeout: 60
+
+- name: Récupérer l'IP Tailscale du nœud
+  ansible.builtin.command: tailscale ip -4
+  register: tailscale_ip
+  until: tailscale_ip.stdout | length > 0
+  retries: 10
+  delay: 5
+  changed_when: false
+
+# V3 : sur le control-plane, l'IP effective remplace la valeur de
+# group_vars/all.yml pour le reste du run (utile en PRA : un VPS1
+# réinstallé peut recevoir une autre IP Tailscale que 100.89.84.16 ;
+# vault_first_contact utilise alors automatiquement la bonne).
+- name: Enregistrer l'IP Tailscale effective du control-plane
+  ansible.builtin.set_fact:
+    k3s_control_plane_ip: "{{ tailscale_ip.stdout | trim }}"
+  when: "'k3s_servers' in group_names"
+
+# -------------------------
+# BASCULE KUBECONFIG VERS L'IP TAILSCALE (control-plane uniquement)
+# -------------------------
+
+- name: Vérifier la présence du kubeconfig utilisateur
+  ansible.builtin.stat:
+    path: "{{ kubeconfig_path }}"
+  register: kubeconfig_file
+
+- name: Remplacer 127.0.0.1 par l'IP Tailscale dans le kubeconfig
+  ansible.builtin.replace:
+    path: "{{ kubeconfig_path }}"
+    regexp: '127\.0\.0\.1'
+    replace: "{{ k3s_control_plane_ip }}"
+  # 26/10 : kubeconfig = control-plane uniquement. Un kubeconfig trouvé
+  # sur un worker (ex. vestige EKS) ne doit ni être modifié ni validé.
+  when: kubeconfig_file.stat.exists and 'k3s_servers' in group_names
+
+# -------------------------
+# VALIDATION VIA LE TAILNET (avant toute fermeture publique)
+# -------------------------
+
+- name: Contrôle kubectl de bout en bout via le tailnet
+  ansible.builtin.command: kubectl get nodes
+  become: true
+  become_user: "{{ kube_user }}"
+  environment:
+    KUBECONFIG: "{{ kubeconfig_path }}"
+  register: kubectl_tailnet
+  until: kubectl_tailnet.rc == 0
+  retries: 3
+  delay: 10
+  changed_when: false
+  when: kubeconfig_file.stat.exists and 'k3s_servers' in group_names
+
+# -------------------------
+# FERMETURE PUBLIQUE DES PORTS CLUSTER (après validation uniquement)
+# -------------------------
+
+- name: Autoriser tout le trafic entrant sur l'interface tailscale0
+  community.general.ufw:
+    rule: allow
+    direction: in
+    interface: tailscale0
+
+- name: Refuser publiquement l'API Kubernetes (6443/tcp)
+  community.general.ufw:
+    rule: deny
+    port: '6443'
+    proto: tcp
+
+- name: Refuser publiquement kubelet (10250/tcp)
+  community.general.ufw:
+    rule: deny
+    port: '10250'
+    proto: tcp
+
+- name: Refuser publiquement flannel VXLAN (8472/udp)
+  community.general.ufw:
+    rule: deny
+    port: '8472'
+    proto: udp
+
+# Correctif du 25/10/2026 (CHG-2026-10-20-TAILNET-VSO) : sans cette
+# étape, les règles ci-dessus peuvent être posées sur un UFW inactif
+# (machine "protégée" en apparence, pare-feu éteint en réalité).
+- name: Activer UFW (règles appliquées + persistance au démarrage)
+  community.general.ufw:
+    state: enabled
+
+- name: Recharger UFW
+  community.general.ufw:
+    state: reloaded
