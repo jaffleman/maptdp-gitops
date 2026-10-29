@@ -7,9 +7,9 @@
 #           Le var est supprimé du playbook : la copie réelle
 #           /etc/rancher/k3s/k3s.yaml -> {{ kubeconfig_path }} (0600,
 #           utilisateur {{ kube_user }}) fonctionne désormais.
-#   - C10 : la bascule 127.0.0.1 -> IP publique est SUPPRIMÉE : le
-#           kubeconfig est basculé vers l'IP Tailscale par le rôle
-#           tailscale_ufw, APRÈS validation du tailnet (anti-lockout).
+#   - C10 : la bascule kubeconfig 127.0.0.1 -> IP Tailscale est PORTÉE
+#           PAR CE RÔLE (V5) : tailscale_ufw est devenu générique (phase
+#           1, commun CP/worker) et ne touche plus au kubeconfig.
 #   - C19 : tls-san ajouté avec l'IP Tailscale du control-plane. Sans
 #           lui, le certificat serving de l'API n'inclut pas l'IP du
 #           tailnet et TOUTE validation TLS via tailnet échoue (kubectl
@@ -17,17 +17,20 @@
 #           issu de l'incident du 24/10/2026 : auth kubernetes Vault
 #           en 403 car le TokenReview vers l'IP tailnet échouait en
 #           vérification de certificat (SAN manquant).
-#           NOTE PRA : si le VPS1 réenrôlé reçoit une IP Tailscale
-#           différente de {{ k3s_control_plane_ip }}, le rôle
-#           tailscale_ufw doit mettre à jour tls-san et faire
-#           régénérer le certificat (restart k3s) AVANT la bascule
-#           kubeconfig.
 #   - C20 (25/10/2026, incident CHG-2026-10-20-TAILNET-VSO) :
 #           node-ip + flannel-iface ajoutés au config.yaml. Sans eux,
 #           le nœud publie son IP publique et la fermeture UFW
 #           inter-nœuds partitionne le cluster. État aligné sur le
 #           config.yaml VPS1 complété à chaud le 25/10 (validé :
 #           ping CP->worker 3/3, VSO 12/12 SYNCED).
+# V5 (29/10) — SCISSION EN 2 PHASES :
+#   - PRA : ce rôle REDÉCOUVRE l'IP Tailscale effective du CP
+#     (tailscale ip -4) et fait autorité sur k3s_control_plane_ip
+#     (surcharge group_vars) pour tls-san, node-ip et la bascule
+#     kubeconfig. Un ré-enrôlement avec IP différente ne nécessite
+#     plus d'éditer les group_vars AVANT le run.
+#   - La validation finale kubectl passe via le tailnet (kubeconfig
+#     basculé), avec retries.
 
 # -------------------------
 # PRÉ-REQUIS
@@ -38,6 +41,21 @@
     path: /etc/rancher/k3s
     state: directory
     mode: '0755'
+
+# V5 (29/10) — PRA : redécouverte de l'IP Tailscale EFFECTIVE du CP.
+# Au ré-enrôlement (rebuild), l'IP tailnet peut changer : ce rôle fait
+# autorité pour tls-san, node-ip, flannel et la bascule kubeconfig.
+- name: Récupérer l'IP Tailscale effective du control-plane
+  ansible.builtin.command: tailscale ip -4
+  register: cp_tailscale_ip
+  changed_when: false
+  retries: 10
+  delay: 5
+  until: cp_tailscale_ip.rc == 0
+
+- name: Surcharger k3s_control_plane_ip avec l'IP effective (PRA)
+  ansible.builtin.set_fact:
+    k3s_control_plane_ip: "{{ cp_tailscale_ip.stdout | trim }}"
 
 # V3 (C7) : écrit AVANT l'installation pour que k3s démarre directement
 # avec le chiffrement des secrets etcd (pas de redémarrage requis).
@@ -74,9 +92,8 @@
     creates: /usr/local/bin/k3s
 
 # V3 (C20) : sur un re-run (PRA ou config modifiée), la modification
-# de config.yaml ne prend effet qu'après restart de k3s. Le config.yaml
-# du VPS1 de prod est déjà conforme (complété à chaud le 25/10) ->
-# pas de restart lors du prochain run.
+# de config.yaml ne prend effet qu'après restart de k3s (le restart
+# fait aussi REGENERER le certificat serving avec le nouveau tls-san).
 - name: Redémarrer k3s si la configuration a changé (re-runs)
   ansible.builtin.systemd:
     name: k3s
@@ -120,6 +137,17 @@
     mode: '0600'
     remote_src: true
 
+# V3 (C10) / V5 (29/10) : bascule kubeconfig vers l'IP Tailscale,
+# désormais portée par CE RÔLE (tailscale_ufw est générique phase 1).
+# Le endpoint 127.0.0.1 de k3s.yaml est inutilisable depuis le tailnet
+# (MSI, Vault/VSO TokenReview) : on le remplace par l'IP tailnet,
+# couverte par le SAN du certificat serving (C19).
+- name: Basculer le serveur du kubeconfig vers l'IP Tailscale
+  ansible.builtin.replace:
+    path: "{{ kubeconfig_path }}"
+    regexp: '127\.0\.0\.1'
+    replace: "{{ k3s_control_plane_ip }}"
+
 # V3 (C8) : le kubeconfig serveur contient les credentials admin du
 # cluster : 0644 était trop permissif.
 - name: Restreindre les permissions du kubeconfig serveur (0600)
@@ -141,8 +169,14 @@
 # VALIDATION
 # -------------------------
 
-- name: Vérifier accès cluster
+# V5 : la validation passe VIA LE TAILNET (kubeconfig basculé) — c'est
+# la preuve que le SAN et l'endpoint sont cohérents (anti-incident 24/10).
+- name: Vérifier accès cluster via le tailnet
   become_user: "{{ kube_user }}"
   shell: kubectl get nodes
   environment:
     KUBECONFIG: "{{ kubeconfig_path }}"
+  register: kube_via_tailnet
+  retries: 3
+  delay: 10
+  until: kube_via_tailnet.rc == 0
