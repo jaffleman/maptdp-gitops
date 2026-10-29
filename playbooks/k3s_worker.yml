@@ -1,28 +1,16 @@
-# V3 - Nouveau playbook (TECH-01) : bootstrap du worker k3s (vps-2).
-# Usage :
-#   ansible-playbook playbooks/k3s_worker.yml \
-#     -e tailscale_auth_key=tskey-auth-xxxx \
-#     -e k3s_token=K10xxxxxxxx
-# Le token k3s se récupère sur le control-plane :
-#   sudo cat /var/lib/rancher/k3s/server/node-token
-# Machine fraîche (SSH sur 22) : ajouter -e bootstrap_ssh=22 (V4 :
-# ansible_port est templatisé dans l'inventaire — le set_fact du rôle
-# security reste effectif, bascule 22 -> 63210 en UN SEUL run).
-# Machine durcie : ne rien passer (port 63210 par défaut).
-- name: Bootstrap du worker k3s (agent)
+# V5 (29/10) — PHASE 2 WORKER : déploiement de l'agent k3s VIA LE TAILNET.
+# Prérequis : PHASE 1 terminée (playbooks/prepare_vps.yml) — VPS durci
+# (sshd 63210, UFW, fail2ban) et enrôlé sur le tailnet.
+# Lancer avec -e ansible_host=<IP Tailscale du worker> (port 63210 par
+# défaut via le template d'inventaire).
+# Extra-vars : -e k3s_token=K10xxxx (node-token du control-plane :
+#   sudo cat /var/lib/rancher/k3s/server/node-token — jamais dans Git).
+- name: Phase 2 - Déploiement de l'agent k3s (worker, via tailnet)
   hosts: k3s_workers
   become: true
   any_errors_fatal: true
 
   pre_tasks:
-
-    # 27/10 : convention de nommage reseau (vps-cp / vps-worker /
-    # vault / msi-admin). Le hostname est pose AVANT l'enrolement
-    # Tailscale et l'installation k3s : le nom MagicDNS Tailscale et
-    # le nom de noeud k3s en heritent.
-    - name: Définir le hostname du nœud (convention de nommage 27/10)
-      ansible.builtin.hostname:
-        name: "{{ node_hostname }}"
 
     - name: Wait for apt lock to be released
       ansible.builtin.shell: |
@@ -55,18 +43,12 @@
 
   roles:
 
-    # 🔐 Security baseline (durcissement SSH + UFW du worker)
-    - { role: security, tags: [security] }
-
-    # 🐍 Runtime
+    # 🐍 Runtime (pip / k8s modules)
     - { role: python_prereqs, tags: [runtime] }
 
     # ⚙️ Pré-requis (aucun port cluster au public)
     - { role: k3s_prereqs, tags: [k3s] }
 
-    # 🔒 Tailscale + fermeture publique des ports cluster
-    # (l'agent joint le control-plane via l'IP Tailscale)
-    - { role: tailscale_ufw, tags: [tailscale] }
-
-    # 🧩 Agent k3s (token via --extra-vars)
+    # 🧩 Agent k3s (token via --extra-vars) — rejoint le control-plane
+    # via le tailnet (node-ip + flannel-iface dans config.yaml)
     - { role: k3s_worker, tags: [k3s] }

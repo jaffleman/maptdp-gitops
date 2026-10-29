@@ -1,12 +1,17 @@
-- name: Bootstrap Kubernetes + ArgoCD + Vault integration
+- name: Phase 2 - Bootstrap Kubernetes + ArgoCD + Vault (CP, via tailnet)
   hosts: k3s_servers
   become: true
-  # V3 (TECH-01) :
-  #   - ciblage k3s_servers uniquement (le worker a son propre
-  #     playbook k3s_worker.yml) ;
+  # V5 (29/10) — scission en 2 phases :
+  #   PHASE 1 = playbooks/prepare_vps.yml (durcissement + Tailscale,
+  #   réutilisable CP/worker). Ce playbook est LA PHASE 2 du CP :
+  #   - connexion VIA LE TAILNET : -e ansible_host=<IP Tailscale du CP>
+  #     (port 63210 par défaut) ;
+  #   - les rôles security et tailscale_ufw ne sont PLUS ici ;
+  #   - la bascule kubeconfig 127.0.0.1 -> IP tailnet et la redécouverte
+  #     de l'IP Tailscale effective (PRA) sont portées par k3s_server ;
   #   - suppression du var kubeconfig_path = /etc/rancher/k3s/k3s.yaml
-  #     qui rendait la copie kubeconfig du rôle k3s_server inopérante
-  #     (src = dest) — la valeur vient de group_vars/all.yml.
+  #     qui rendait la copie kubeconfig inopérante (src = dest) — la
+  #     valeur vient de group_vars/all.yml.
   any_errors_fatal: true
 
   # -------------------------
@@ -14,14 +19,6 @@
   # -------------------------
 
   pre_tasks:
-
-    # 27/10 : convention de nommage reseau (vps-cp / vps-worker /
-    # vault / msi-admin). Le hostname est pose AVANT l'enrolement
-    # Tailscale et l'installation k3s : le nom MagicDNS Tailscale et
-    # le nom de noeud k3s en heritent.
-    - name: Définir le hostname du nœud (convention de nommage 27/10)
-      ansible.builtin.hostname:
-        name: "{{ node_hostname }}"
 
     - name: Wait for apt lock to be released
       ansible.builtin.shell: |
@@ -58,21 +55,12 @@
 
   roles:
 
-    # 🔐 Security baseline
-    - { role: security, tags: [security] }
-
     # 🐍 Runtime (pip / k8s modules) — DOIT PASSER AVANT TOUT LE RESTE
     - { role: python_prereqs, tags: [runtime] }
 
     # ⚙️ Kubernetes infra
     - { role: k3s_prereqs, tags: [k3s] }
     - { role: k3s_server, tags: [k3s] }
-
-    # 🔒 V3 : enrôlement Tailscale + validation via le tailnet +
-    # fermeture publique de 6443/10250/8472. Doit passer APRÈS
-    # k3s_server (kubeconfig à basculer) et AVANT Vault/VSO
-    # (kubernetes_host = IP Tailscale).
-    - { role: tailscale_ufw, tags: [tailscale, k3s] }
 
     # 🧑‍🤝‍🧑 Vault - 1. contact et configuration de base
     - { role: vault_first_contact, tags: [vault] }

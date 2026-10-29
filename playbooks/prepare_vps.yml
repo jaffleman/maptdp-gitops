@@ -1,0 +1,150 @@
+# V5 (29/10) — PHASE 1 : préparation et durcissement d'un VPS.
+# RÉUTILISABLE pour le control-plane ET le worker (hosts: k3s_nodes).
+# Machine fraîche (SSH 22)      : -e bootstrap_ssh=22 -l <hote>
+# Machine déjà durcie (63210)  : ne rien passer (re-run idempotent,
+#                                pas de reboot si le port ne change pas)
+# La phase 1 se termine par un reboot FIRE-AND-FORGET : c'est le BOOT
+# qui bascule sshd sur {{ ssh_port }} (config écrite par le rôle
+# security) — aucune reconnexion Ansible n'est tentée après. Les
+# validations finales sont 100% LOCALES (wait_for depuis le MSI).
+# La PHASE 2 se connecte VIA LE TAILNET :
+#   worker : playbooks/k3s_worker.yml
+#   CP     : playbooks/k3s_platform.yml
+# Extra-vars : -e tailscale_auth_key=tskey-auth-xxxx (jamais dans Git)
+- name: Phase 1 - Préparation et durcissement d'un VPS (CP + worker)
+  hosts: k3s_nodes
+  become: true
+  any_errors_fatal: true
+
+  pre_tasks:
+
+    - name: Définir le hostname du nœud (convention de nommage 27/10)
+      ansible.builtin.hostname:
+        name: "{{ node_hostname }}"
+
+    - name: Wait for apt lock to be released
+      ansible.builtin.shell: |
+        while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; do
+          echo "Waiting for apt lock..."
+          sleep 5
+        done
+      changed_when: false
+
+    - name: Ensure python3-venv is installed
+      ansible.builtin.apt:
+        name: python3-venv
+        state: present
+        update_cache: yes
+        lock_timeout: 300
+      register: apt_result
+      retries: 5
+      delay: 15
+      until: apt_result is succeeded
+
+    - name: Create virtualenv for Ansible
+      ansible.builtin.command:
+        cmd: python3 -m venv /opt/ansible-venv
+      args:
+        creates: /opt/ansible-venv/bin/python
+
+    - name: Set ansible Python interpreter
+      ansible.builtin.set_fact:
+        ansible_python_interpreter: /opt/ansible-venv/bin/python
+
+  roles:
+
+    # 🔐 Durcissement : sshd_config (Port 63210 écrit, effet au reboot),
+    # UFW (63210+limit, 80/443, filet 22 temporaire), fail2ban.
+    - { role: security, tags: [security] }
+
+    # 🐍 Enrôlement Tailscale + fermeture publique 6443/10250/8472.
+    - { role: tailscale_ufw, tags: [tailscale] }
+
+  post_tasks:
+
+    # -------------------------
+    # FERMETURE DU 22 (sur la connexion vivante, AVANT le reboot)
+    # -------------------------
+
+    - name: Supprimer l'autorisation temporaire du port 22 dans UFW
+      community.general.ufw:
+        rule: allow
+        port: '22'
+        proto: tcp
+        delete: true
+      failed_when: false
+
+    - name: Refuser explicitement le port 22 dans UFW
+      community.general.ufw:
+        rule: deny
+        port: '22'
+        proto: tcp
+
+    # -------------------------
+    # PRÉPARATION DE LA BASCULE (sans l'exécuter : le boot le fera)
+    # -------------------------
+
+    - name: Activer le service SSH classique
+      ansible.builtin.systemd:
+        name: ssh.service
+        enabled: true
+
+    - name: Arrêter et désactiver COMPLÈTEMENT le socket SSH d'Ubuntu 24+
+      ansible.builtin.systemd:
+        name: ssh.socket
+        state: stopped
+        enabled: false
+
+    - name: Forcer la purge des sockets systemd (Crucial sur Ubuntu 24)
+      ansible.builtin.systemd:
+        daemon_reload: true
+
+    # -------------------------
+    # REBOOT FIRE-AND-FORGET : le boot applique Port {{ ssh_port }}
+    # (uniquement si le port a réellement changé — re-runs sans reboot)
+    # -------------------------
+
+    - name: Redémarrer le VPS (fire-and-forget, sans attendre)
+      ansible.builtin.command: /sbin/reboot
+      async: 1
+      poll: 0
+      ignore_unreachable: true
+      ignore_errors: true
+      when: ssh_port_change is changed
+
+    # -------------------------
+    # VALIDATIONS 100% LOCALES (depuis le MSI)
+    # -------------------------
+
+    - name: Attendre le retour du VPS sur le port {{ ssh_port }} (IP publique)
+      ansible.builtin.wait_for:
+        host: "{{ ansible_host | default(inventory_hostname) }}"
+        port: "{{ ssh_port }}"
+        delay: 30
+        timeout: 600
+        state: started
+        search_regex: OpenSSH
+      delegate_to: localhost
+      become: false
+      when: ssh_port_change is changed
+
+    - name: Attendre le retour du VPS sur le tailnet (port {{ ssh_port }})
+      ansible.builtin.wait_for:
+        host: "{{ tailscale_ip.stdout | trim }}"
+        port: "{{ ssh_port }}"
+        delay: 10
+        timeout: 300
+        state: started
+        search_regex: OpenSSH
+      delegate_to: localhost
+      become: false
+      when: ssh_port_change is changed
+
+    - name: Phase 1 terminée — instructions pour la phase 2
+      ansible.builtin.debug:
+        msg: >-
+          VPS durci (sshd {{ ssh_port }}, UFW, fail2ban), enrôlé sur le
+          tailnet, rebooté. PHASE 2 : lancer le playbook de déploiement
+          avec -e ansible_host={{ tailscale_ip.stdout | trim }}
+          (connexion via tailnet, port {{ ssh_port }} par défaut).
+      delegate_to: localhost
