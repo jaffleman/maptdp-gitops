@@ -190,6 +190,11 @@
     state: restarted
 
 - name: Mettre à jour immédiatement le port en mémoire pour Ansible
+  # NOTE (V4, 29/10) : un set_fact NE PEUT PAS surcharger -e ansible_port
+  # (précédence maximale des extra-vars). Sur un run lancé avec
+  # -e ansible_port=22 (machine fraîche), ce set_fact est sans effet et
+  # la reconnexion après bascule sshd se ferait sur le port 22 fermé.
+  # Le garde-fou ci-dessous détecte ce cas et arrête PROPREMENT le run.
   set_fact:
     ansible_port: "{{ ssh_port }}"
 
@@ -211,6 +216,24 @@
 # reset_connection existant arrivait trop tard, apres le reboot).
 - name: Forcer la reconnexion SSH sur le nouveau port (bascule fiable)
   meta: reset_connection
+
+# V4 (29/10) : machine fraîche = run lancé avec -e ansible_port=<ancien>.
+# Les extra-vars ne peuvent pas être surchargées en cours de run : toute
+# reconnexion après la bascule sshd viserait l'ancien port (fermé) et
+# échouerait UNREACHABLE à un endroit aléatoire. On s'arrête donc ici,
+# PROPREMENT, avec l'instruction exacte. Le second run (sur le nouveau
+# port) referme UFW 22, poursuit fail2ban puis les rôles suivants —
+# le filet temporaire 22 reste en place entre les deux runs (by design).
+- name: Arrêt déterministe si le run a été lancé sur l'ancien port
+  ansible.builtin.fail:
+    msg: >-
+      Port SSH basculé sur {{ ssh_port }} avec succès. Ce run a été lancé
+      avec -e ansible_port={{ ansible_port }} (extra-vars invulnérables :
+      impossible de rebasculer en cours de run). RELANCER la même commande
+      avec -e ansible_port={{ ssh_port }} : le rôle est idempotent et les
+      tâches restantes (fermeture UFW du {{ ansible_port }}, fail2ban,
+      Tailscale, k3s) s'exécuteront alors normalement.
+  when: ansible_port | int != ssh_port | int
 
 - name: Recharger UFW pour valider la table des règles
   community.general.ufw:
