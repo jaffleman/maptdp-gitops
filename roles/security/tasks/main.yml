@@ -229,10 +229,12 @@
     msg: >-
       Port SSH basculé sur {{ ssh_port }} avec succès. Ce run a été lancé
       avec -e ansible_port={{ ansible_port }} (extra-vars invulnérables :
-      impossible de rebasculer en cours de run). RELANCER la même commande
-      avec -e ansible_port={{ ssh_port }} : le rôle est idempotent et les
-      tâches restantes (fermeture UFW du {{ ansible_port }}, fail2ban,
-      Tailscale, k3s) s'exécuteront alors normalement.
+      impossible de rebasculer en cours de run). La machine est DÉJÀ sur
+      le nouveau port : RELANCER SANS option (l'inventaire templatisé
+      donnera {{ ssh_port }}), ou avec -e ansible_port={{ ssh_port }} —
+      le rôle est idempotent. Pour les prochaines machines fraîches :
+      lancer avec -e bootstrap_ssh=22 pour un one-shot complet (méthode
+      V4, cf. commentaires d'inventaire).
   when: ansible_port | int != ssh_port | int
 
 - name: Recharger UFW pour valider la table des règles

@@ -5,9 +5,10 @@
 #     -e k3s_token=K10xxxxxxxx
 # Le token k3s se récupère sur le control-plane :
 #   sudo cat /var/lib/rancher/k3s/server/node-token
-# Si le worker est encore sur le port SSH 22 (jamais durci), ajouter
-# -e ansible_port=22 ; après durcissement, décommenter ansible_port
-# dans l'inventaire.
+# Machine fraîche (SSH sur 22) : ajouter -e bootstrap_ssh=22 (V4 :
+# ansible_port est templatisé dans l'inventaire — le set_fact du rôle
+# security reste effectif, bascule 22 -> 63210 en UN SEUL run).
+# Machine durcie : ne rien passer (port 63210 par défaut).
 - name: Bootstrap du worker k3s (agent)
   hosts: k3s_workers
   become: true
