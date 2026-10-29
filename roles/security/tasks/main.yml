@@ -1,12 +1,12 @@
-# V3 - Correctifs TECH-01 (audit du 2026-10-23). Modifications marquées V3 :
-#   - C3  : purge known_hosts templatisée et déplacée AVANT la bascule SSH
-#   - C2  : port 22 retiré de ufw_allowed_ports ; allow 22 temporaire
-#           numéroté, supprimé puis deny AVANT le reboot
-#   - C12 : timeouts de reboot et d'attente en variables
-#   - C13 : ignoreip fail2ban en variable
-#   - Anti-lockout reboot : le filet 22 reste en place tant que le nouveau
-#     port n'est pas confirmé ; reboot conditionné au changement réel du
-#     port SSH (plus de reboot inutile lors des re-runs).
+# V5 (29/10) — Rôle de DURCISSEMENT uniquement : sshd_config (le Port
+# {{ ssh_port }} est ÉCRIT mais prendra effet au reboot de fin de phase 1),
+# UFW, fail2ban. La bascule effective (socket systemd + reboot) est portée
+# par les post_tasks de playbooks/prepare_vps.yml (phase 1) : c'est le BOOT
+# qui applique le nouveau port — plus aucune reconnexion Ansible en cours
+# de run, plus de set_fact/reset_connection/garde-fou.
+# Conserve les correctifs V3 : C2 (gestion explicite du 22), C3 (purge
+# known_hosts templatisée), C13 (ignoreip en variable).
+# Conserve les correctifs V4 : fail2ban idempotent (copy), filet 22 temporaire.
 
 # -------------------------
 # PRÉ-REQUIS
@@ -25,7 +25,7 @@
     state: present
 
 # -------------------------
-# SSH HARDENING (Configuration)
+# SSH HARDENING (configuration — effet au reboot de fin de phase 1)
 # -------------------------
 
 - name: Désactiver l'authentification par mot de passe SSH
@@ -81,11 +81,7 @@
   changed_when: false
 
 # -------------------------
-# V3 (C3) : PURGE KNOWN_HOSTS AVANT LA BASCULE
-# L'original purgeait "[146.59.231.136]:63210" en dur, APRÈS le reboot.
-# La purge est désormais templatisée et exécutée AVANT le changement de
-# port : avec host_key_checking = accept-new (ansible.cfg V3), la clé du
-# nouveau port est réacceptée proprement au contact suivant.
+# V3 (C3) : PURGE KNOWN_HOSTS AVANT TOUT CONTACT (accept-new ansible.cfg)
 # -------------------------
 
 - name: Purger l'entrée known_hosts [IP]:22 (premier contact)
@@ -107,7 +103,7 @@
   changed_when: false
 
 # -------------------------
-# FIREWALL UFW (Préparation des règles AVANT la coupure)
+# FIREWALL UFW
 # -------------------------
 
 - name: Reset UFW (nettoyage complet)
@@ -136,10 +132,9 @@
     port: "{{ ssh_port }}"
     proto: tcp
 
-# V3 (C2) : filet de sécurité temporaire, numéroté en tête de table.
-# Il couvre la fenêtre de bascule (cas où sshd resterait sur le port 22,
-# p.ex. override cloud-init). Il est supprimé dès que le nouveau port
-# est confirmé, AVANT le reboot.
+# V3 (C2) : filet de sécurité temporaire. Il couvre la fenêtre avant le
+# reboot de fin de phase 1 (sshd encore sur 22). Supprimé par les
+# post_tasks de prepare_vps.yml AVANT le reboot.
 - name: Autorisation TEMPORAIRE du port 22 (filet de bascule)
   community.general.ufw:
     rule: allow
@@ -165,134 +160,6 @@
 - name: Activer UFW
   ufw:
     state: enabled
-
-# -------------------------
-# BASCULE SERVICE SSH + MAJ LIEN
-# -------------------------
-- name: Activer le service SSH classique
-  systemd:
-    name: ssh.service
-    enabled: true
-
-- name: Arrêter et désactiver COMPLÈTEMENT le socket SSH d'Ubuntu 24+
-  systemd:
-    name: ssh.socket
-    state: stopped
-    enabled: false
-
-- name: Forcer la purge des sockets systemd (Crucial sur Ubuntu 24)
-  systemd:
-    daemon_reload: true
-
-- name: Redémarrer le service SSH classique pour s'approprier les ports
-  systemd:
-    name: ssh.service
-    state: restarted
-
-- name: Mettre à jour immédiatement le port en mémoire pour Ansible
-  # NOTE (V4, 29/10) : un set_fact NE PEUT PAS surcharger -e ansible_port
-  # (précédence maximale des extra-vars). Sur un run lancé avec
-  # -e ansible_port=22 (machine fraîche), ce set_fact est sans effet et
-  # la reconnexion après bascule sshd se ferait sur le port 22 fermé.
-  # Le garde-fou ci-dessous détecte ce cas et arrête PROPREMENT le run.
-  set_fact:
-    ansible_port: "{{ ssh_port }}"
-
-- name: Attendre que le nouveau port SSH soit opérationnel et réponde (depuis localhost)
-  wait_for:
-    host: "{{ ansible_host | default(inventory_hostname) }}"
-    port: "{{ ssh_port }}"
-    delay: 2
-    timeout: 60
-    state: started
-    search_regex: OpenSSH
-  delegate_to: localhost
-  become: false
-
-# V4 (29/10) : apres la bascule sshd, la connexion persistante etablie
-# sur le port 22 est morte ; sans reset explicite, la tache suivante
-# reutilise l'objet de connexion en cache (ancien port) et echoue avec
-# "Connection refused" — constate sur machine fraiche le 29/10 (le
-# reset_connection existant arrivait trop tard, apres le reboot).
-- name: Forcer la reconnexion SSH sur le nouveau port (bascule fiable)
-  meta: reset_connection
-
-# V4 (29/10) : machine fraîche = run lancé avec -e ansible_port=<ancien>.
-# Les extra-vars ne peuvent pas être surchargées en cours de run : toute
-# reconnexion après la bascule sshd viserait l'ancien port (fermé) et
-# échouerait UNREACHABLE à un endroit aléatoire. On s'arrête donc ici,
-# PROPREMENT, avec l'instruction exacte. Le second run (sur le nouveau
-# port) referme UFW 22, poursuit fail2ban puis les rôles suivants —
-# le filet temporaire 22 reste en place entre les deux runs (by design).
-- name: Arrêt déterministe si le run a été lancé sur l'ancien port
-  ansible.builtin.fail:
-    msg: >-
-      Port SSH basculé sur {{ ssh_port }} avec succès. Ce run a été lancé
-      avec -e ansible_port={{ ansible_port }} (extra-vars invulnérables :
-      impossible de rebasculer en cours de run). La machine est DÉJÀ sur
-      le nouveau port : RELANCER SANS option (l'inventaire templatisé
-      donnera {{ ssh_port }}), ou avec -e ansible_port={{ ssh_port }} —
-      le rôle est idempotent. Pour les prochaines machines fraîches :
-      lancer avec -e bootstrap_ssh=22 pour un one-shot complet (méthode
-      V4, cf. commentaires d'inventaire).
-  when: ansible_port | int != ssh_port | int
-
-- name: Recharger UFW pour valider la table des règles
-  community.general.ufw:
-    state: reloaded
-
-# V3 (C2) : suppression de l'autorisation temporaire PUIS deny explicite.
-# Si le wait_for précédent échoue, le playbook s'arrête ICI en laissant
-# le filet 22 en place : état dégradé mais récupérable.
-- name: Supprimer l'autorisation temporaire du port 22 dans UFW
-  community.general.ufw:
-    rule: allow
-    port: '22'
-    proto: tcp
-    delete: true
-  failed_when: false
-
-- name: Refuser explicitement le port 22 dans UFW
-  community.general.ufw:
-    rule: deny
-    port: '22'
-    proto: tcp
-
-# V3 (C12) : reboot conditionné au changement réel du port SSH
-# (plus de reboot inutile lors des re-runs sur une machine déjà durcie).
-- name: Redémarrer le VPS pour purger définitivement les sockets zombies
-  reboot:
-    reboot_timeout: "{{ reboot_timeout }}"
-    connect_timeout: "{{ reboot_connect_timeout }}"
-    msg: "Reboot appliqué par Ansible suite au changement de port SSH"
-  when: ssh_port_change is changed
-
-- name: Attendre que le VPS réponde exclusivement sur le nouveau port
-  wait_for:
-    host: "{{ ansible_host | default(inventory_hostname) }}"
-    port: "{{ ssh_port }}"
-    delay: 20
-    timeout: "{{ wait_port_timeout }}"
-    state: started
-    search_regex: OpenSSH
-  delegate_to: localhost
-  become: false
-
-- name: Forcer Ansible à fermer l'ancienne connexion persistante (ControlMaster)
-  meta: reset_connection
-
-# -------------------------
-# VERIFICATIONS + AUTRES PACKETS
-# -------------------------
-
-- name: Vérifier les sockets TCP distants (sur le nouveau port !)
-  command: ss -tlnp
-  register: ssh_ports
-  changed_when: false
-
-- name: Filtrer l'affichage SSH
-  debug:
-    msg: "{{ ssh_ports.stdout_lines | select('search', 'ssh') | list }}"
 
 # -------------------------
 # FAIL2BAN
