@@ -1,6 +1,13 @@
 # V5 (29/10) — PHASE 1 : préparation et durcissement d'un VPS.
+# V5.1 : la finalisation (fermeture 22 + bascule systemd + reboot) est
+#        regroupée dans UNE SEULE tâche atomique fire-and-forget :
+#        après la suppression du filet 22, TOUTE tâche distante
+#        ultérieure est vouée à l'UNREACHABLE (UFW bloque 22, sshd pas
+#        encore basculé). V5 avait laissé 5 tâches après le filet ->
+#        lockout. V5.1 n'en laisse plus AUCUNE.
 # RÉUTILISABLE pour le control-plane ET le worker (hosts: k3s_nodes).
 # Machine fraîche (SSH 22)      : -e bootstrap_ssh=22 -l <hote>
+#                                -e ansible_host=<IP publique> -e tailscale_auth_key=tskey-…
 # Machine déjà durcie (63210)  : ne rien passer (re-run idempotent,
 #                                pas de reboot si le port ne change pas)
 # La phase 1 se termine par un reboot FIRE-AND-FORGET : c'est le BOOT
@@ -10,7 +17,6 @@
 # La PHASE 2 se connecte VIA LE TAILNET :
 #   worker : playbooks/k3s_worker.yml
 #   CP     : playbooks/k3s_platform.yml
-# Extra-vars : -e tailscale_auth_key=tskey-auth-xxxx (jamais dans Git)
 - name: Phase 1 - Préparation et durcissement d'un VPS (CP + worker)
   hosts: k3s_nodes
   become: true
@@ -63,49 +69,29 @@
   post_tasks:
 
     # -------------------------
-    # FERMETURE DU 22 (sur la connexion vivante, AVANT le reboot)
+    # FINALISATION ATOMIQUE (V5.1) — UNE SEULE commande, UNE SEULE
+    # connexion SSH, plus AUCUNE tâche distante après.
+    # Ordre sûr : deny 22 d'abord (l'autorisation existante prime
+    # encore), bascule systemd, PUIS suppression du filet en dernier,
+    # juste avant le reboot. Le boot applique Port {{ ssh_port }}.
     # -------------------------
 
-    - name: Supprimer l'autorisation temporaire du port 22 dans UFW
-      community.general.ufw:
-        rule: allow
-        port: '22'
-        proto: tcp
-        delete: true
-      failed_when: false
-
-    - name: Refuser explicitement le port 22 dans UFW
-      community.general.ufw:
-        rule: deny
-        port: '22'
-        proto: tcp
-
-    # -------------------------
-    # PRÉPARATION DE LA BASCULE (sans l'exécuter : le boot le fera)
-    # -------------------------
-
-    - name: Activer le service SSH classique
-      ansible.builtin.systemd:
-        name: ssh.service
-        enabled: true
-
-    - name: Arrêter et désactiver COMPLÈTEMENT le socket SSH d'Ubuntu 24+
-      ansible.builtin.systemd:
-        name: ssh.socket
-        state: stopped
-        enabled: false
-
-    - name: Forcer la purge des sockets systemd (Crucial sur Ubuntu 24)
-      ansible.builtin.systemd:
-        daemon_reload: true
-
-    # -------------------------
-    # REBOOT FIRE-AND-FORGET : le boot applique Port {{ ssh_port }}
-    # (uniquement si le port a réellement changé — re-runs sans reboot)
-    # -------------------------
-
-    - name: Redémarrer le VPS (fire-and-forget, sans attendre)
-      ansible.builtin.command: /sbin/reboot
+    - name: Fermer le 22, préparer le boot sur {{ ssh_port }} et rebooter (atomique, fire-and-forget)
+      ansible.builtin.shell: |
+        set -x
+        # Le boot appliquera Port {{ ssh_port }} (config déjà écrite)
+        systemctl enable ssh.service
+        systemctl disable --now ssh.socket || true
+        systemctl daemon-reload
+        # Deny d'abord : tant que le filet allow existe, il prime
+        ufw deny 22/tcp comment 'SSH legacy - ferme definitivement' || true
+        # Suppression du filet : à partir d'ICI le port 22 est mort,
+        # mais cette session shell se termine ligne suivante.
+        ufw delete allow 22/tcp || true
+        # Reboot fire-and-forget
+        nohup /sbin/reboot >/dev/null 2>&1 &
+      args:
+        executable: /bin/bash
       async: 1
       poll: 0
       ignore_unreachable: true
