@@ -204,6 +204,14 @@
   delegate_to: localhost
   become: false
 
+# V4 (29/10) : apres la bascule sshd, la connexion persistante etablie
+# sur le port 22 est morte ; sans reset explicite, la tache suivante
+# reutilise l'objet de connexion en cache (ancien port) et echoue avec
+# "Connection refused" — constate sur machine fraiche le 29/10 (le
+# reset_connection existant arrivait trop tard, apres le reboot).
+- name: Forcer la reconnexion SSH sur le nouveau port (bascule fiable)
+  meta: reset_connection
+
 - name: Recharger UFW pour valider la table des règles
   community.general.ufw:
     state: reloaded
@@ -265,22 +273,21 @@
 # FAIL2BAN
 # -------------------------
 
-- name: Créer la configuration fail2ban locale
-  shell: |
-    cat << 'EOF' > /etc/fail2ban/jail.local
-    [DEFAULT]
-    ignoreip = {{ fail2ban_ignoreip }}
+- name: Créer la configuration fail2ban locale (idempotent V4)
+  ansible.builtin.copy:
+    dest: /etc/fail2ban/jail.local
+    mode: "0644"
+    content: |
+      [DEFAULT]
+      ignoreip = {{ fail2ban_ignoreip }}
 
-    [sshd]
-    enabled = true
-    port = {{ ssh_port }}
-    backend = systemd
-    maxretry = {{ fail2ban_maxretry }}
-    findtime = {{ fail2ban_findtime }}
-    bantime = {{ fail2ban_bantime }}
-    EOF
-  args:
-    executable: /bin/bash
+      [sshd]
+      enabled = true
+      port = {{ ssh_port }}
+      backend = systemd
+      maxretry = {{ fail2ban_maxretry }}
+      findtime = {{ fail2ban_findtime }}
+      bantime = {{ fail2ban_bantime }}
 
 - name: "Attendre 30 secondes que le système et le réseau se stabilisent"
   ansible.builtin.pause:
