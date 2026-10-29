@@ -12,11 +12,17 @@
 #        ssh_port_change n'est plus "changed", et l'ancien
 #        conditionnement aurait SAUTÉ la bascule silencieusement
 #        (machine bloquée sur le port 22 sans aucun échec).
+# V5.3 : sur les RE-RUNS (machine déjà basculée, connexion via le
+#        tailnet), le rôle security repose le filet allow 22 (après
+#        son ufw reset) et efface le deny 22 — la tâche atomique étant
+#        sautée, personne ne les refermait. Un bloc de nettoyage dédié
+#        referme le 22 SANS reboot : la connexion passe par
+#        tailscale0:{{ ssh_port }}, elle n'est pas affectée.
 # RÉUTILISABLE pour le control-plane ET le worker (hosts: k3s_nodes).
 # Machine fraîche (SSH 22)      : -e bootstrap_ssh=22 -l <hote>
 #                                -e ansible_host=<IP publique> -e tailscale_auth_key=tskey-…
-# Machine déjà durcie (63210)  : ne rien passer (re-run idempotent,
-#                                pas de reboot si sshd est déjà basculé)
+# Machine déjà durcie (63210)  : -e ansible_host=<IP Tailscale> (re-run
+#                                idempotent, pas de reboot)
 # La phase 1 se termine par un reboot FIRE-AND-FORGET : c'est le BOOT
 # qui bascule sshd sur {{ ssh_port }} (config écrite par le rôle
 # security) — aucune reconnexion Ansible n'est tentée après. Les
@@ -119,7 +125,49 @@
       when: sshd_port_check.rc != 0
 
     # -------------------------
-    # VALIDATIONS 100% LOCALES (depuis le MSI)
+    # NETTOYAGE DES RE-RUNS (V5.3) — machine déjà basculée, connexion
+    # via le tailnet. Le rôle security repose le filet allow 22 à
+    # chaque run (après son "ufw reset") : sans ce nettoyage, il
+    # resterait posé et le deny 22 serait perdu. Fermer le 22 ne
+    # coupe RIEN : la session passe par tailscale0:{{ ssh_port }}.
+    # -------------------------
+
+    - name: "Re-runs : refuser le port 22 (posture finale)"
+      community.general.ufw:
+        rule: deny
+        port: '22'
+        proto: tcp
+      when: sshd_port_check.rc == 0
+
+    - name: "Re-runs : retirer le filet temporaire du 22"
+      community.general.ufw:
+        rule: allow
+        port: '22'
+        proto: tcp
+        delete: true
+      failed_when: false
+      when: sshd_port_check.rc == 0
+
+    - name: "Re-runs : service SSH classique activé"
+      ansible.builtin.systemd:
+        name: ssh.service
+        enabled: true
+      when: sshd_port_check.rc == 0
+
+    - name: "Re-runs : socket SSH désactivé (Ubuntu 24+)"
+      ansible.builtin.systemd:
+        name: ssh.socket
+        state: stopped
+        enabled: false
+      when: sshd_port_check.rc == 0
+
+    - name: "Re-runs : daemon-reload systemd"
+      ansible.builtin.systemd:
+        daemon_reload: true
+      when: sshd_port_check.rc == 0
+
+    # -------------------------
+    # VALIDATIONS 100% LOCALES (depuis le MSI) — reboot uniquement
     # -------------------------
 
     - name: Attendre le retour du VPS sur le port {{ ssh_port }} (IP publique)
@@ -150,7 +198,7 @@
       ansible.builtin.debug:
         msg: >-
           VPS durci (sshd {{ ssh_port }}, UFW, fail2ban), enrôlé sur le
-          tailnet, rebooté. PHASE 2 : lancer le playbook de déploiement
-          avec -e ansible_host={{ tailscale_ip.stdout | trim }}
+          tailnet. PHASE 2 : lancer le playbook de déploiement avec
+          -e ansible_host={{ tailscale_ip.stdout | trim }}
           (connexion via tailnet, port {{ ssh_port }} par défaut).
       delegate_to: localhost
