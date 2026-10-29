@@ -21,7 +21,9 @@ fail2ban_maxretry: 5
 fail2ban_findtime: "10m"
 fail2ban_bantime: "24h"
 
-# V3 - Constat C12 : 120 s se sont avérées trop courtes pour le reboot.
-reboot_timeout: 600
+# V3 - Constat C12 : 120 s se sont avérées trop courtes ; 600 s se sont
+# avérées trop courtes à leur tour le 26/10 (reconnexion > 600 s lors du
+# durcissement du worker) — V4 (29/10) : marge portée à 900 s.
+reboot_timeout: 900
 reboot_connect_timeout: 10
 wait_port_timeout: 180
