@@ -5,11 +5,18 @@
 #        ultérieure est vouée à l'UNREACHABLE (UFW bloque 22, sshd pas
 #        encore basculé). V5 avait laissé 5 tâches après le filet ->
 #        lockout. V5.1 n'en laisse plus AUCUNE.
+# V5.2 : la finalisation est conditionnée à l'état EFFECTIF de sshd
+#        (écoute-t-il sur {{ ssh_port }} ?) et non au seul changement
+#        de config. Un run interrompu après écriture du sshd_config
+#        mais AVANT finalisation doit reprendre proprement : au re-run,
+#        ssh_port_change n'est plus "changed", et l'ancien
+#        conditionnement aurait SAUTÉ la bascule silencieusement
+#        (machine bloquée sur le port 22 sans aucun échec).
 # RÉUTILISABLE pour le control-plane ET le worker (hosts: k3s_nodes).
 # Machine fraîche (SSH 22)      : -e bootstrap_ssh=22 -l <hote>
 #                                -e ansible_host=<IP publique> -e tailscale_auth_key=tskey-…
 # Machine déjà durcie (63210)  : ne rien passer (re-run idempotent,
-#                                pas de reboot si le port ne change pas)
+#                                pas de reboot si sshd est déjà basculé)
 # La phase 1 se termine par un reboot FIRE-AND-FORGET : c'est le BOOT
 # qui bascule sshd sur {{ ssh_port }} (config écrite par le rôle
 # security) — aucune reconnexion Ansible n'est tentée après. Les
@@ -69,6 +76,19 @@
   post_tasks:
 
     # -------------------------
+    # V5.2 : état EFFECTIF de sshd — la finalisation n'a lieu QUE si
+    # sshd n'écoute pas encore sur {{ ssh_port }}. Couvre à la fois la
+    # machine fraîche (bascule de port) et la reprise après un run
+    # interrompu entre écriture du config et finalisation.
+    # -------------------------
+
+    - name: Vérifier si sshd écoute déjà sur {{ ssh_port }}
+      ansible.builtin.shell: "ss -tln | grep ':{{ ssh_port }} '"
+      register: sshd_port_check
+      failed_when: false
+      changed_when: false
+
+    # -------------------------
     # FINALISATION ATOMIQUE (V5.1) — UNE SEULE commande, UNE SEULE
     # connexion SSH, plus AUCUNE tâche distante après.
     # Ordre sûr : deny 22 d'abord (l'autorisation existante prime
@@ -96,7 +116,7 @@
       poll: 0
       ignore_unreachable: true
       ignore_errors: true
-      when: ssh_port_change is changed
+      when: sshd_port_check.rc != 0
 
     # -------------------------
     # VALIDATIONS 100% LOCALES (depuis le MSI)
@@ -112,7 +132,7 @@
         search_regex: OpenSSH
       delegate_to: localhost
       become: false
-      when: ssh_port_change is changed
+      when: sshd_port_check.rc != 0
 
     - name: Attendre le retour du VPS sur le tailnet (port {{ ssh_port }})
       ansible.builtin.wait_for:
@@ -124,7 +144,7 @@
         search_regex: OpenSSH
       delegate_to: localhost
       become: false
-      when: ssh_port_change is changed
+      when: sshd_port_check.rc != 0
 
     - name: Phase 1 terminée — instructions pour la phase 2
       ansible.builtin.debug:
