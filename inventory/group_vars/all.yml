@@ -23,12 +23,17 @@ ssh_port: 63210
 # Le kubeconfig serveur /etc/rancher/k3s/k3s.yaml reste en 0600 root.
 kubeconfig_path: "/home/{{ ssh_user }}/.kube/config"
 
-# IP Tailscale du control-plane (vps-2a962a39). Depuis la V3, l'API
+# IP Tailscale du control-plane (vps-cp). Depuis la V3, l'API
 # Kubernetes (6443) n'est joignable QUE via le tailnet.
 # ATTENTION PRA : un VPS1 réinstallé peut recevoir une autre IP au
 # ré-enrôlement ; le rôle tailscale_ufw met à jour cette valeur pour
 # le run en cours — ajuster ce fichier si l'IP change définitivement.
-k3s_control_plane_ip: "100.89.84.16"
+# 30/10/2026 — rebuild phase B : 100.89.84.16 -> 100.74.111.47.
+# NOTE : le .env du worker pointe actuellement sur le NOM MagicDNS
+# ('https://vps-cp:6443', accept-dns=true) posé manuellement lors du
+# re-join ; le rôle k3s_worker.yml construit l'URL depuis cette
+# variable IP — uniformiser le choix nom/IP est au backlog.
+k3s_control_plane_ip: "100.74.111.47"
 
 # Adresse Vault via le tailnet (bascule du 24/10/2026) : le chemin
 # public https (Freebox/Caddy) est cassé depuis le 20/10 ; le cluster
