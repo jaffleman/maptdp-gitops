@@ -18,6 +18,10 @@ spec:
     metadata:
       labels:
         app: postgres-restore
+        # Requis par le NetworkPolicy du chart maptdp-db : seuls les pods
+        # app.kubernetes.io/component in {backend, backup} sont admis sur 5432
+        # (kube-router rejette avec tcp-reset -> "Connection refused").
+        app.kubernetes.io/component: backup
     spec:
       restartPolicy: Never
       containers:
