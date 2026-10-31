@@ -1,0 +1,56 @@
+# Purge des dumps de base VIDE post-sinistre (Runbook V2 §5, Etape 5).
+# Usage : editer FILES ci-dessous, puis delete/apply comme le Job de restauration.
+# ⚠️ Ne purger QUE des dumps verifies comme vides (base seedee sans donnees).
+# Repere : la veille du sinistre CP = 30/10 ; le formatage a eu lieu le 30/10
+# vers 06:00 UTC ; tout dump du 31/10 01:00 UTC predates la restauration 31/10
+# soir, donc base vide sans donnees applicatives.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: postgres-purge-empty-dumps-job
+  namespace: maptdp-staging
+spec:
+  backoffLimit: 1
+  template:
+    metadata:
+      labels:
+        app: postgres-purge
+        # Requis par le NetworkPolicy maptdp-db pour joindre S3 ? Non :
+        # S3 est externe, aucune regle d'ingress necessaire. Le label backup
+        # est present par coherence avec le composant sauvegarde.
+        app.kubernetes.io/component: backup
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: purge-dumps
+        image: docker.io/jaffleman971/postgres-backup:1.1
+        imagePullPolicy: IfNotPresent
+        env:
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef: {name: postgres-s3-auth, key: access_key}
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef: {name: postgres-s3-auth, key: secret_key}
+        - name: AWS_DEFAULT_REGION
+          valueFrom:
+            secretKeyRef: {name: postgres-s3-auth, key: region}
+        - name: S3_BUCKET
+          valueFrom:
+            secretKeyRef: {name: postgres-s3-auth, key: bucket}
+        - name: S3_PREFIX
+          valueFrom:
+            secretKeyRef: {name: postgres-s3-auth, key: prefix}
+        command: ["/bin/sh", "-c"]
+        args:
+          - |
+            set -euo pipefail
+            FILES="backup_maptdpbdd_20261031_010000.sql.gz"
+            echo "=== Etat avant purge ==="
+            aws s3 ls "s3://${S3_BUCKET}/${S3_PREFIX}/"
+            for f in ${FILES}; do
+              echo "=== Purge de ${f} (dump de base vide post-sinistre) ==="
+              aws s3 rm "s3://${S3_BUCKET}/${S3_PREFIX}/${f}"
+            done
+            echo "=== Etat apres purge ==="
+            aws s3 ls "s3://${S3_BUCKET}/${S3_PREFIX}/"
