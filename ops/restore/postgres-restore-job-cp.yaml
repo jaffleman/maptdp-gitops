@@ -1,0 +1,79 @@
+# Patron de restauration PostgreSQL depuis S3 (Runbook V2)
+# Usage PRA : editer FILE dans args (dernier bon dump), puis :
+#   kubectl -n maptdp-staging delete job postgres-restore-job --ignore-not-found
+#   kubectl apply -f <ce fichier>
+#   kubectl -n maptdp-staging logs -f job/postgres-restore-job
+# ⚠️ Ne jamais restaurer un dump de base vide ; verifier la taille du dump
+# dans S3 avant (les dumps de base vide font ~600 octets).
+# Symetrique du CronJob postgres-backup-cronjob (meme image, memes secrets
+# VSO : postgres-s3-auth / maptdp-db-auth — aucun secret en clair).
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: postgres-restore-job
+  namespace: maptdp-staging
+spec:
+  # Variante epinglee au CP (contournement temporaire du flux worker->CP:5432
+  # refuse le 31/10 ; a retirer une fois le reseau inter-noeuds re-diagnostique).
+  backoffLimit: 1
+  template:
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: vps-cp
+    metadata:
+      labels:
+        app: postgres-restore
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: pg-restore
+        image: docker.io/jaffleman971/postgres-backup:1.1
+        imagePullPolicy: IfNotPresent
+        env:
+        - name: PGHOST
+          value: "maptdp-db"
+        - name: PGPORT
+          value: "5432"
+        - name: PGUSER
+          valueFrom:
+            secretKeyRef: {name: maptdp-db-auth, key: user}
+        - name: PGPASSWORD
+          valueFrom:
+            secretKeyRef: {name: maptdp-db-auth, key: password}
+        - name: PGDATABASE
+          valueFrom:
+            secretKeyRef: {name: maptdp-db-auth, key: db}
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef: {name: postgres-s3-auth, key: access_key}
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef: {name: postgres-s3-auth, key: secret_key}
+        - name: AWS_DEFAULT_REGION
+          valueFrom:
+            secretKeyRef: {name: postgres-s3-auth, key: region}
+        - name: S3_BUCKET
+          valueFrom:
+            secretKeyRef: {name: postgres-s3-auth, key: bucket}
+        - name: S3_PREFIX
+          valueFrom:
+            secretKeyRef: {name: postgres-s3-auth, key: prefix}
+        command: ["/bin/sh", "-c"]
+        args:
+          - |
+            set -euo pipefail
+            FILE="backup_maptdpbdd_20261030_041706.sql.gz"
+            echo "=== Verification du dump dans S3 ==="
+            aws s3 ls "s3://${S3_BUCKET}/${S3_PREFIX}/" | tail -5
+            echo "=== Dump cible ==="
+            aws s3 ls "s3://${S3_BUCKET}/${S3_PREFIX}/${FILE}"
+            echo "=== Telechargement ==="
+            aws s3 cp "s3://${S3_BUCKET}/${S3_PREFIX}/${FILE}" /tmp/restore.sql.gz
+            gunzip /tmp/restore.sql.gz
+            ls -lh /tmp/restore.sql
+            echo "=== Restauration (ON_ERROR_STOP) ==="
+            psql -h "${PGHOST}" -p "${PGPORT}" -U "${PGUSER}" -d "${PGDATABASE}" \
+              -v ON_ERROR_STOP=1 < /tmp/restore.sql
+            echo "=== Recette : tables restaurees ==="
+            psql -h "${PGHOST}" -U "${PGUSER}" -d "${PGDATABASE}" -c '\dt'
+            echo "=== Restauration terminee avec succes ==="
