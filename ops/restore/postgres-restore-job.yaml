@@ -70,6 +70,11 @@ spec:
             aws s3 cp "s3://${S3_BUCKET}/${S3_PREFIX}/${FILE}" /tmp/restore.sql.gz
             gunzip /tmp/restore.sql.gz
             ls -lh /tmp/restore.sql
+            echo "=== Reset de la base cible (le chart seed le schema au demarrage) ==="
+            psql -h "${PGHOST}" -p "${PGPORT}" -U "${PGUSER}" -d postgres \
+              -v ON_ERROR_STOP=1 -c "DROP DATABASE \"${PGDATABASE}\" WITH (FORCE);"
+            psql -h "${PGHOST}" -p "${PGPORT}" -U "${PGUSER}" -d postgres \
+              -v ON_ERROR_STOP=1 -c "CREATE DATABASE \"${PGDATABASE}\";"
             echo "=== Restauration (ON_ERROR_STOP) ==="
             psql -h "${PGHOST}" -p "${PGPORT}" -U "${PGUSER}" -d "${PGDATABASE}" \
               -v ON_ERROR_STOP=1 < /tmp/restore.sql
