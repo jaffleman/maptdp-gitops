@@ -24,8 +24,7 @@ resources:
 
 networkPolicy:
   enabled: true
-  allowFromNamespaces:
-    - maptdp
+  allowFromNamespaces: []
   allowFromPodSelectors:
     - matchLabels:
         app.kubernetes.io/component: backend
