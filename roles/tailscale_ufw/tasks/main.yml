@@ -42,14 +42,35 @@
   failed_when: false
   changed_when: false
 
-- name: "Enrôler le nœud dans le tailnet (no_log : authkey jamais journalisée)"
-  ansible.builtin.command: >
-    tailscale up
-    --auth-key={{ tailscale_auth_key }}
-    --hostname={{ node_hostname | default(inventory_hostname) }}
-    --accept-dns=false
-  when: tailscale_status.rc != 0
-  no_log: true
+- name: "Enrôlement Tailscale (bloc protégé C05)"
+  block:
+    - name: "Enrôler le nœud dans le tailnet (no_log : authkey jamais journalisée)"
+      ansible.builtin.command: >
+        tailscale up
+        --auth-key={{ tailscale_auth_key }}
+        --hostname={{ node_hostname | default(inventory_hostname) }}
+        --accept-dns=false
+      when: tailscale_status.rc != 0
+      no_log: true
+  rescue:
+    # C05 (audit du 30/10) : no_log masque AUSSI le message d'erreur.
+    # On garde le secret caché mais on remplace le silence par un
+    # diagnostic explicite des causes probables.
+    - name: "C05 - Échec de l'enrôlement : diagnostic sans divulguer l'authkey"
+      ansible.builtin.fail:
+        msg: >-
+          L'enrôlement Tailscale a échoué (sortie masquée car la commande
+          contient l'authkey). Causes probables, dans l'ordre :
+          (1) authkey expirée ou déjà consommée (à usage unique et courte
+              durée) → générer une nouvelle sur le PC admin (console
+              Tailscale ou 'tailscale lock' non requis — Machine/Devices) ;
+          (2) tailnet injoinignable depuis le nœud → tester
+              'curl -s https://login.tailscale.com' depuis le VPS ;
+          (3) hostname invalide → vérifier node_hostname
+              ({{ node_hostname | default(inventory_hostname) }}).
+          Vérification manuelle après correction : 'tailscale status'
+          sur le nœud, puis relancer le playbook.
+          L'authkey n'est volontairement PAS affichée ici.
 
 - name: Attendre l'interface tailscale0
   ansible.builtin.wait_for:

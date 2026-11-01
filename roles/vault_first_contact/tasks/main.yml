@@ -12,21 +12,39 @@
 # mais {{ vault_addr }} (group_vars/all.yml), accès Vault via le
 # tailnet chiffré WireGuard.
 
-- name: "Vault : Authentification temporaire via AppRole"
-  ansible.builtin.uri:
-    url: "{{ vault_addr }}/v1/auth/approle/login"
-    method: POST
-    body_format: json
-    body:
-      role_id: "{{ vault_ansible_role_id }}"
-      secret_id: "{{ vault_ansible_secret_id }}"
-  register: vault_login
-  no_log: true
-  delegate_to: localhost
-  connection: local
-  become: false
-  vars:
-    ansible_become: false
+- name: "Vault : Login AppRole (bloc protégé C05)"
+  block:
+    - name: "Vault : Authentification temporaire via AppRole"
+      ansible.builtin.uri:
+        url: "{{ vault_addr }}/v1/auth/approle/login"
+        method: POST
+        body_format: json
+        body:
+          role_id: "{{ vault_ansible_role_id }}"
+          secret_id: "{{ vault_ansible_secret_id }}"
+      register: vault_login
+      no_log: true
+      delegate_to: localhost
+      connection: local
+      become: false
+      vars:
+        ansible_become: false
+  rescue:
+    # C05 : le login AppRole échoue silencieusement sans ce diagnostic.
+    - name: "C05 - Échec du login AppRole : diagnostic sans divulguer les identifiants"
+      ansible.builtin.fail:
+        msg: >-
+          L'authentification AppRole Vault a échoué (sortie masquée car
+          role_id/secret_id sont des secrets). Causes probables :
+          (1) SecretID EXPIRÉ ou déjà consommé (config : TTL 20 min,
+              usage unique) → en générer un nouveau depuis le PC admin :
+              vault write -address={{ vault_addr }} auth/approle/role/ansible-vps/secret-id
+              puis relancer avec -e vault_ansible_secret_id=… ;
+          (2) role_id/secret_id non fournis en extra-vars ;
+          (3) Vault injoignable via le tailnet → tester depuis le PC :
+              curl -s {{ vault_addr }}/v1/sys/health ;
+          (4) role AppRole modifié → vérifier les policies sur ansible-vps.
+          Aucun identifiant n'est affiché volontairement.
 
 - name: Récupérer le certificat CA depuis le VPS distant
   ansible.builtin.slurp:
