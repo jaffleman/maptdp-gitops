@@ -21,7 +21,12 @@
         name: vault-connection-maptdp
         namespace: argocd
       spec:
-        address: "https://vault.jaffleman.tech"
+        # C07 (audit du 30/10) : plus d'adresse codée en dur. La bascule du
+        # 24/10 (panne Freebox) a rendu le chemin public https mort ; la
+        # source unique est {{ vault_addr }} (inventory/group_vars/all.yml,
+        # tailnet 100.91.75.58:8200). Sans cette correction, un re-run de ce
+        # rôle en PRA réintroduisait l'URL morte et cassait la synchro VSO.
+        address: "{{ vault_addr }}"
 
 # -------------------------
 # Service Account
