@@ -35,6 +35,7 @@ def listening_ports(text):
 
 
 def firewall_posture(text, ipv6_enabled):
+    text = '\n'.join(line.split('#', 1)[0].rstrip() for line in text.splitlines())
     # Le filet 22 explicite doit avoir disparu, même si un deny coexiste.
     allow22 = bool(re.search(r'^22(?:/tcp)?(?:\s+\(v6\))?\s+(?:ALLOW|LIMIT)', text, re.M))
     deny4 = bool(re.search(r'^22(?:/tcp)?\s+DENY\s+IN\s+Anywhere\s*$', text, re.M))
@@ -51,6 +52,8 @@ def local_failures(report, port):
         errors.append('configuration sshd invalide')
     if report['configured_ports'] != [port]:
         errors.append('ports effectifs sshd différents du port attendu')
+    if report['configured_listener_ports'] != [port]:
+        errors.append('ListenAddress effectif ne correspond pas au port attendu')
     if report['listen22']:
         errors.append('écoute TCP sur le port 22 encore présente')
     if not report['listen_target']:
@@ -85,6 +88,9 @@ def inspect(port):
     report = {
         'sshd_syntax_valid': syntax == 0,
         'configured_ports': sorted(set(int(p) for p in re.findall(r'^port\s+(\d+)$', effective, re.M))),
+        'configured_listener_ports': sorted(set(int(endpoint.rsplit(':', 1)[-1])
+            for endpoint in re.findall(r'^listenaddress\s+(\S+)$', effective, re.M)
+            if endpoint.rsplit(':', 1)[-1].isdigit())),
         'listen22': 22 in ports, 'listen_target': port in ports,
         'ssh_service_active': active_rc == 0 and active == 'active',
         'ssh_service_enabled': enabled_rc == 0 and enabled == 'enabled',
@@ -126,6 +132,7 @@ def controller(config):
             '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes',
             '-o', 'ControlMaster=no', '-o', 'ControlPath=none', '-o', 'IdentitiesOnly=yes',
             '-o', 'PasswordAuthentication=no', '-o', 'KbdInteractiveAuthentication=no',
+            '-o', 'PreferredAuthentications=publickey',
             '-o', 'ConnectTimeout=10', user + '@' + host, '/usr/bin/id -un']
     rc, identity = run(args)
     fresh = rc == 0 and identity == user

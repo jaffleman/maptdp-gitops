@@ -6,7 +6,7 @@ from ssh_postconditions import listening_ports, firewall_posture, local_failures
 
 class SSHPostconditionsTests(unittest.TestCase):
     def clean(self):
-        return {'sshd_syntax_valid': True, 'configured_ports': [63210], 'listen22': False,
+        return {'sshd_syntax_valid': True, 'configured_ports': [63210], 'configured_listener_ports': [63210], 'listen22': False,
                 'listen_target': True, 'ssh_service_active': True, 'ssh_service_enabled': True,
                 'ssh_socket_inactive_disabled': True,
                 'firewall': {'active': True, 'incoming_default_deny': True, 'explicit_allow22': False,
@@ -27,12 +27,21 @@ class SSHPostconditionsTests(unittest.TestCase):
         report['firewall']['ipv6_enabled']=False
         self.assertEqual(local_failures(report,63210),[])
 
+    def test_real_phase1_deny_comments_are_not_mistaken_for_missing_rules(self):
+        text='Status: active\nDefault: deny (incoming), allow (outgoing)\n22/tcp DENY IN Anywhere # SSH legacy - ferme definitivement\n22/tcp (v6) DENY IN Anywhere (v6) # SSH legacy - ferme definitivement'
+        report=self.clean(); report['firewall']=firewall_posture(text,True)
+        self.assertEqual(local_failures(report,63210),[])
+
     def test_listener22_is_failure_even_behind_firewall(self):
         report=self.clean(); report['listen22']=True
         self.assertTrue(local_failures(report,63210))
 
     def test_socket_or_extra_config_port_cannot_pass(self):
         report=self.clean(); report['ssh_socket_inactive_disabled']=False
+        self.assertTrue(local_failures(report,63210))
+
+    def test_listenaddress_cannot_reintroduce_legacy_port_after_restart(self):
+        report=self.clean(); report['configured_listener_ports']=[22,63210]
         self.assertTrue(local_failures(report,63210))
         report=self.clean(); report['configured_ports']=[22,63210]
         self.assertTrue(local_failures(report,63210))
@@ -54,6 +63,7 @@ class SSHPostconditionsTests(unittest.TestCase):
             self.assertIn('ControlPath=none',args)
             self.assertIn('StrictHostKeyChecking=yes',args)
             self.assertIn('PasswordAuthentication=no',args)
+            self.assertIn('PreferredAuthentications=publickey',args)
 
     def test_open_public22_fails_even_if_fresh_auth_works(self):
         with patch('ssh_postconditions.run',return_value=(0,'ubuntu')), \

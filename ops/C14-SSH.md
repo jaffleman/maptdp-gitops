@@ -23,7 +23,7 @@ Le playbook dédié lit les états, contrôle une connexion SSH neuve et sonde l
 
 | Contrôle | Résultat exigé |
 |---|---|
-| Configuration | sshd -t valide ; sshd -T ne déclare que ssh_port, différent de 22 |
+| Configuration | sshd -t valide ; sshd -T ne déclare que ssh_port, différent de 22, y compris les ports des ListenAddress |
 | Écoutes | Aucune écoute TCP 22, y compris loopback/IPv6 ; écoute du port final présente |
 | Persistance systemd | ssh.service actif et enabled ; ssh.socket inactive et disabled/masked |
 | Pare-feu | UFW actif et politique entrante deny ; deny explicite 22 IPv4 et IPv6 si IPV6=yes ; aucun allow/limit explicite 22 résiduel |
