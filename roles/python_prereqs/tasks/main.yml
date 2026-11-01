@@ -1,21 +1,50 @@
 # -------------------------
-# INSTALLATION DEPENDANCES
+# AUTONOMIE DU RÔLE (correctif du 31/10, lié à C06/C10) : un run partiel
+# (--tags runtime,bootstrap) saute les pre_tasks du playbook (apt + venv
+# + set ansible_python_interpreter). Sans ces tâches, le rôle échouait
+# (venv absent) ou laissait l'interpréteur sur /usr/bin/python3, sans la
+# lib kubernetes -> échec des modules kubernetes.core.* des rôles suivants.
+# -------------------------
+
+- name: Installer python3-venv si absent
+  ansible.builtin.apt:
+    name: python3-venv
+    state: present
+    update_cache: yes
+    lock_timeout: 300
+  register: apt_result
+  retries: 5
+  delay: 15
+  until: apt_result is succeeded
+
+- name: Créer le virtualenv si absent
+  ansible.builtin.command:
+    cmd: python3 -m venv /opt/ansible-venv
+  args:
+    creates: /opt/ansible-venv/bin/python
+
+# -------------------------
+# INSTALLATION DÉPENDANCES
 # -------------------------
 - name: Installer outils de base Python dans le venv
   raw: /opt/ansible-venv/bin/pip install --upgrade pip setuptools packaging
 
 
 - name: Installer dépendances Kubernetes dans venv
-  pip:
+  ansible.builtin.pip:
     name:
       - kubernetes
       - openshift
     virtualenv: /opt/ansible-venv
 
 # -------------------------
-# VALIDATION
+# VALIDATION + BASCULE D'INTERPRÉTEUR
 # -------------------------
 
 - name: Vérifier import kubernetes
-  command: /opt/ansible-venv/bin/python -c "import kubernetes; print('OK')"
+  ansible.builtin.command: /opt/ansible-venv/bin/python -c "import kubernetes; print('OK')"
   changed_when: false
+
+- name: Basculer l'interpréteur Ansible vers le venv (indépendant des pre_tasks)
+  ansible.builtin.set_fact:
+    ansible_python_interpreter: /opt/ansible-venv/bin/python
