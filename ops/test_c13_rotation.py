@@ -1,5 +1,5 @@
 import unittest
-from c13_rotate_server import needs_rotation
+from c13_rotate_server import needs_rotation, verification_ok
 
 
 class RotationStateTests(unittest.TestCase):
@@ -21,6 +21,15 @@ class RotationStateTests(unittest.TestCase):
         for phase, same in [('rotated', True), ('unknown', False)]:
             with self.assertRaises(ValueError):
                 needs_rotation(phase, same)
+
+    def test_authenticated_but_unsupported_endpoint_is_not_success(self):
+        self.assertFalse(verification_ok(400, 401))
+        self.assertFalse(verification_ok(200, 200))
+        self.assertFalse(verification_ok(200, 404))
+
+    def test_positive_control_and_revoked_old_credential(self):
+        self.assertTrue(verification_ok(200, 401))
+        self.assertTrue(verification_ok(200, 403))
 
 
 if __name__ == '__main__':

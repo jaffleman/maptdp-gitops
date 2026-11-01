@@ -32,6 +32,10 @@ def needs_rotation(phase, same_token):
     return same_token
 
 
+def verification_ok(new_status, old_status):
+    return new_status == 200 and old_status in (401, 403)
+
+
 def load_session(path):
     info = path.lstat()
     require(stat.S_ISREG(info.st_mode) and info.st_uid == os.getuid() and
@@ -149,15 +153,17 @@ elif action=='verify':
  opener=urllib.request.build_opener(urllib.request.ProxyHandler({}),urllib.request.HTTPSHandler(context=context))
  def status(token):
   credential=token.split('::',1)[1]
-  req=urllib.request.Request('https://127.0.0.1:6443/v1-k3s/server-bootstrap',headers={'Authorization':'Basic '+base64.b64encode(credential.encode()).decode()})
+  req=urllib.request.Request('https://127.0.0.1:6443/v1-k3s/encrypt/status',headers={'Authorization':'Basic '+base64.b64encode(credential.encode()).decode()})
   try:
    with opener.open(req,timeout=15) as r:return r.status
   except urllib.error.HTTPError as e:return e.code
  current=token_path.read_text().strip()
  good=status(current);old=status(c['old_token'])
- if good!=200 or old not in (401,403):raise ValueError('vérification ancien/nouveau token non conforme')
- state['verified']=True;save(state)
- print(json.dumps({'new_token_http':good,'old_token_http':old,'verified':True}))
+ print(json.dumps({'new_token_http':good,'old_token_http':old}))
+elif action=='mark_verified':
+ state=json.loads(marker.read_text())
+ if state['phase']!='rotated':raise ValueError('rotation non enregistrée')
+ state['verified']=True;save(state);print('{"verified":true}')
 else:raise ValueError('action inconnue')
 '''
 
@@ -220,6 +226,10 @@ def main(args):
             current = server.call('read_token')['token']
             require(hmac.compare_digest(current, after['server_token']), 'token courant différent de l’archive après')
             result = server.call('verify', old_token=old)
+            require(verification_ok(result['new_token_http'], result['old_token_http']),
+                    'contrôle HTTP non conforme : nouveau=%d ancien=%d' %
+                    (result['new_token_http'], result['old_token_http']))
+            result.update(server.call('mark_verified'))
             print('OK | Vérification contrôlée | ' + json.dumps(result), flush=True)
 
 
