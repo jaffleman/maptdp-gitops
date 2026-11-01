@@ -39,13 +39,13 @@
           chargement de l'inventaire si l'erreur persiste).
         success_msg: "C03 - Variables obligatoires présentes."
 
-    - name: Wait for apt lock to be released
-      ansible.builtin.shell: |
-        while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; do
-          echo "Waiting for apt lock..."
-          sleep 5
-        done
-      changed_when: false
+    - name: "C10 - Attendre les verrous APT avec une échéance"
+      ansible.builtin.import_role:
+        name: readiness_wait
+      vars:
+        readiness_kind: apt
+        readiness_timeout: "{{ readiness_apt_timeout }}"
+      tags: [apt_wait]
 
     - name: Ensure python3-venv is installed
       ansible.builtin.apt:
@@ -107,3 +107,4 @@
 
     # 🔥 FUTUR
     - { role: argocd_bootstrapv2, tags: [gitops, bootstrap] }
+

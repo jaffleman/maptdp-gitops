@@ -1,0 +1,31 @@
+---
+- name: C10 - Attendre la condition avec échéance globale et requêtes bornées
+  ansible.builtin.command:
+    argv:
+      - python3
+      - -c
+      - "{{ lookup('ansible.builtin.file', playbook_dir ~ '/../ops/readiness_wait.py') }}"
+    stdin: >-
+      {{ {'kind': readiness_kind, 'name': readiness_name,
+          'namespace': readiness_namespace, 'kubeconfig': readiness_kubeconfig,
+          'timeout': readiness_timeout | float, 'interval': readiness_poll_interval | float,
+          'request_timeout': readiness_request_timeout | float} | to_json }}
+  register: readiness_wait_result
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: C10 - Afficher le résultat sans réponse brute ni secret
+  ansible.builtin.debug:
+    msg: "{{ readiness_wait_result.stdout | from_json }}"
+
+- name: C10 - Exiger la disponibilité avant de poursuivre
+  ansible.builtin.assert:
+    that:
+      - readiness_wait_result.rc == 0
+    fail_msg: >-
+      C10 : condition {{ readiness_kind }} non satisfaite pour
+      {{ readiness_namespace }}/{{ readiness_name }}. Consulter le dernier état
+      et le délai dans le rapport. APT : identifier le détenteur du verrou ;
+      Kubernetes : vérifier accès API, ressource et conditions, sans afficher les Secrets.
+    success_msg: "C10 : condition {{ readiness_kind }} satisfaite."

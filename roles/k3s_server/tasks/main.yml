@@ -104,12 +104,15 @@
 # ATTENTE DU CLUSTER
 # -------------------------
 
-- name: Attendre que le node k3s soit ready
-  shell: k3s kubectl get nodes
-  register: k3s_status
-  retries: 10
-  delay: 5
-  until: k3s_status.rc == 0
+- name: "C10 - Attendre le CP Ready et l'API réellement prête"
+  ansible.builtin.import_role:
+    name: readiness_wait
+  vars:
+    readiness_kind: node
+    readiness_name: "{{ node_hostname }}"
+    readiness_kubeconfig: /etc/rancher/k3s/k3s.yaml
+    readiness_timeout: "{{ readiness_node_timeout }}"
+  tags: [k3s_ready]
 
 # V3 (C7) : contrôle que le chiffrement des secrets est bien actif.
 - name: Vérifier que le chiffrement des secrets est actif
@@ -171,12 +174,14 @@
 
 # V5 : la validation passe VIA LE TAILNET (kubeconfig basculé) — c'est
 # la preuve que le SAN et l'endpoint sont cohérents (anti-incident 24/10).
-- name: Vérifier accès cluster via le tailnet
+- name: "C10 - Vérifier Ready et l'API via le kubeconfig tailnet utilisateur"
+  ansible.builtin.import_role:
+    name: readiness_wait
   become_user: "{{ kube_user }}"
-  shell: kubectl get nodes
-  environment:
-    KUBECONFIG: "{{ kubeconfig_path }}"
-  register: kube_via_tailnet
-  retries: 3
-  delay: 10
-  until: kube_via_tailnet.rc == 0
+  vars:
+    readiness_kind: node
+    readiness_name: "{{ node_hostname }}"
+    readiness_kubeconfig: "{{ kubeconfig_path }}"
+    readiness_timeout: "{{ readiness_node_timeout }}"
+  tags: [k3s_tailnet_ready]
+

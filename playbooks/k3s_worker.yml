@@ -24,13 +24,13 @@
           Le bootstrap temporaire est créé sur le CP par le rôle C13.
         success_msg: "C03/C13 - Paramètres worker présents, aucun token serveur fourni."
 
-    - name: Wait for apt lock to be released
-      ansible.builtin.shell: |
-        while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; do
-          echo "Waiting for apt lock..."
-          sleep 5
-        done
-      changed_when: false
+    - name: "C10 - Attendre les verrous APT avec une échéance"
+      ansible.builtin.import_role:
+        name: readiness_wait
+      vars:
+        readiness_kind: apt
+        readiness_timeout: "{{ readiness_apt_timeout }}"
+      tags: [apt_wait]
 
     - name: Ensure python3-venv is installed
       ansible.builtin.apt:
@@ -64,4 +64,5 @@
     # 🧩 Agent k3s (bootstrap temporaire C13) — rejoint le control-plane
     # via le tailnet (node-ip + flannel-iface dans config.yaml)
     - { role: k3s_worker, tags: [k3s] }
+
 

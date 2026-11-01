@@ -44,3 +44,10 @@ vault_addr: "http://100.91.75.58:8200"
 # fail2ban : IP admin à ajouter ponctuellement via
 #   -e fail2ban_ignoreip="127.0.0.1/8 ::1 86.246.10.119"
 fail2ban_ignoreip: "127.0.0.1/8 ::1"
+
+# C10 (01/11) — budgets des attentes, hors durée des tâches d'installation.
+readiness_apt_timeout: 300
+readiness_node_timeout: 300
+readiness_deployment_timeout: 300
+readiness_argocd_timeout: 600
+

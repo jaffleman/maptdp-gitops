@@ -70,13 +70,13 @@
       ansible.builtin.hostname:
         name: "{{ node_hostname }}"
 
-    - name: Wait for apt lock to be released
-      ansible.builtin.shell: |
-        while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; do
-          echo "Waiting for apt lock..."
-          sleep 5
-        done
-      changed_when: false
+    - name: "C10 - Attendre les verrous APT avec une échéance"
+      ansible.builtin.import_role:
+        name: readiness_wait
+      vars:
+        readiness_kind: apt
+        readiness_timeout: "{{ readiness_apt_timeout }}"
+      tags: [apt_wait]
 
     - name: Ensure python3-venv is installed
       ansible.builtin.apt:
@@ -227,7 +227,7 @@
       ansible.builtin.debug:
         msg: >-
           VPS durci (sshd {{ ssh_port }}, UFW, fail2ban), enrôlé sur le
-          tailnet. PHASE 2 : lancer le playbook de déploiement avec
+          tailnet. PHASE 2 : lancer le playbook de déploiement
           après mise à jour de l'adresse ansible_host dans l'inventaire :
           {{ tailscale_ip.stdout | trim }}. Ne pas passer ansible_host en
           extra-vars en phase 2 ; connexion via tailnet, port {{ ssh_port }}.
@@ -236,4 +236,5 @@
 
 # C14 : nouveau play, nouveau port, après fin du reboot éventuel.
 - import_playbook: ssh_postconditions.yml
+
 

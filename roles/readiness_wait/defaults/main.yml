@@ -1,0 +1,8 @@
+---
+readiness_kind: ''
+readiness_name: ''
+readiness_namespace: ''
+readiness_kubeconfig: /etc/rancher/k3s/k3s.yaml
+readiness_timeout: 300
+readiness_poll_interval: 5
+readiness_request_timeout: 10

@@ -20,16 +20,14 @@
           repository: registry.k8s.io/kubebuilder/kube-rbac-proxy
           tag: v0.15.0
 
-- name: Wait for Vault Secrets Operator deployment to be ready
-  kubernetes.core.k8s_info:
-    api_version: apps/v1
-    kind: Deployment
-    namespace: kube-system
-    name: vault-secrets-operator-controller-manager # <-- Le nom exact constaté
-    kubeconfig: "{{ kubeconfig_path }}"
-  register: vso_deployment
-  retries: 20
-  delay: 5
-  until: >
-    vso_deployment.resources | length > 0 and
-    (vso_deployment.resources[0].status.readyReplicas | default(0)) == (vso_deployment.resources[0].status.replicas | default(1))
+- name: "C10 - Attendre le rollout complet du Deployment VSO"
+  ansible.builtin.import_role:
+    name: readiness_wait
+  vars:
+    readiness_kind: deployment
+    readiness_name: vault-secrets-operator-controller-manager
+    readiness_namespace: kube-system
+    readiness_kubeconfig: "{{ kubeconfig_path }}"
+    readiness_timeout: "{{ readiness_deployment_timeout }}"
+  tags: [vso_ready]
+
