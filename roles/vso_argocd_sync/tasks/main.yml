@@ -11,6 +11,7 @@
 # -------------------------
 
 - name: "VSO App : Configure VaultConnection CRD"
+  tags: [vault_connection]
   kubernetes.core.k8s:
     kubeconfig: "{{ kubeconfig_path }}"
     state: present
