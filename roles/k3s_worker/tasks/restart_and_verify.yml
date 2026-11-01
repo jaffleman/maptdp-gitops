@@ -1,0 +1,30 @@
+---
+- name: C13 - Redémarrer l'agent avec ses identifiants locaux
+  ansible.builtin.systemd:
+    name: k3s-agent
+    state: restarted
+    enabled: true
+
+- name: C13 - Vérifier le service agent actif
+  ansible.builtin.command: systemctl is-active k3s-agent
+  changed_when: false
+
+- name: C13 - Relever une borne temporelle sur le CP après redémarrage
+  ansible.builtin.command: date -u +%Y-%m-%dT%H:%M:%SZ
+  delegate_to: "{{ groups['k3s_servers'][0] }}"
+  register: k3s_rejoin_since
+  changed_when: false
+
+- name: C13 - Attendre Ready et un Lease effectivement renouvelé
+  ansible.builtin.command:
+    argv:
+      - python3
+      - -c
+      - "{{ lookup('ansible.builtin.file', playbook_dir ~ '/../ops/k3s_node_rejoined.py') }}"
+    stdin: "{{ {'node': k3s_node_name, 'since': k3s_rejoin_since.stdout} | to_json }}"
+  delegate_to: "{{ groups['k3s_servers'][0] }}"
+  register: k3s_rejoin_result
+  changed_when: false
+  retries: 24
+  delay: 5
+  until: k3s_rejoin_result.rc == 0

@@ -1,8 +1,5 @@
-# V3 - Nouveau rôle (TECH-01)
-# Token k3s fourni via --extra-vars, jamais dans Git :
-#   -e k3s_token=K10xxxxxxxx
-k3s_token: ""
-
-# Nom du nœud k3s ; surchargé dans l'inventaire (vps-ovh2 -> vps-2,
-# nom de nœud historique conservé, cf. PREUVE-012)
-k3s_node_name: "{{ inventory_hostname }}"
+---
+# Durée d'enrôlement, pas usage unique. Révocation explicite après Ready.
+k3s_bootstrap_ttl: 20m
+k3s_refresh_bootstrap_token: false
+k3s_worker_token_file: /etc/rancher/k3s/worker-bootstrap-token

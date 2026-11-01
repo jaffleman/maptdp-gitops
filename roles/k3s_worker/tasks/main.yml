@@ -1,33 +1,68 @@
-# V3 - Nouveau rôle (TECH-01) : agent k3s sur le worker.
-# Le token est fourni via --extra-vars (jamais dans Git) :
-#   sudo cat /var/lib/rancher/k3s/server/node-token   (sur le control-plane)
-#   -e k3s_token=K10xxxx
-# L'URL du control-plane utilise l'IP Tailscale (6443 non public).
-#
-# Correctif du 25/10/2026 (incident CHG-2026-10-20-TAILNET-VSO) :
-# l'agent enrôlé le 20/10 sans node-ip/flannel-iface publiait son IP
-# PUBLIQUE ; la fermeture UFW inter-nœuds a alors partitionné le
-# cluster (CP->worker 10250 KO, flannel inter-nœuds coupé, VSO et
-# dumps PG en échec). Le config.yaml est désormais écrit AVANT
-# l'installation de l'agent — état aligné sur la réparation manuelle
-# validée le 25/10 (config.yaml worker : node-ip + flannel-iface).
-
-# -------------------------
-# CONTRÔLE PRÉALABLE
-# -------------------------
-
-- name: Vérifier que le token k3s et l'IP du control-plane sont fournis
+---
+# C13 : le secret serveur ne quitte plus le CP. Bootstrap TTL puis certificats.
+- name: C13 - Vérifier les paramètres non secrets et refuser l'ancien contrat
   ansible.builtin.assert:
     that:
-      - k3s_token | length > 0
-      - k3s_control_plane_ip | length > 0
+      - not ansible_check_mode
+      - k3s_token is not defined
+      - groups['k3s_servers'] | length == 1
+      - k3s_control_plane_ip is defined
+      - hostvars[groups['k3s_servers'][0]].ansible_host != ansible_host
+      - k3s_node_name is match('^[a-z0-9][a-z0-9-]*$')
+      - k3s_worker_token_file == '/etc/rancher/k3s/worker-bootstrap-token'
+      - k3s_bootstrap_ttl is match('^([1-9]|1[0-9]|20)m$')
     fail_msg: >-
-      k3s_token manquant (--extra-vars) et/ou k3s_control_plane_ip
-      absent de group_vars/all.yml.
+      C13 : utiliser l'inventaire à jour, sans k3s_token ni ansible_host en extra-vars.
+      Un seul CP est pris en charge, TTL 1 à 20 minutes. Pour une inspection sans
+      modification utiliser playbooks/k3s_tokens_preflight.yml, pas --check.
 
-# -------------------------
-# CONFIGURATION RÉSEAU DE L'AGENT (avant installation)
-# -------------------------
+- name: C13 - Détecter le binaire installé
+  ansible.builtin.stat:
+    path: /usr/local/bin/k3s
+  register: k3s_worker_binary
+
+- name: C13 - Inspecter le modèle existant sans valeur confidentielle
+  ansible.builtin.command:
+    argv:
+      - python3
+      - -c
+      - "{{ lookup('ansible.builtin.file', playbook_dir ~ '/../ops/k3s_token_preflight.py') }}"
+    stdin: '{"mode":"worker"}'
+  register: k3s_worker_inspect
+  changed_when: false
+  when: k3s_worker_binary.stat.exists
+
+- name: C13 - Refuser les surcharges hors du modèle pris en charge
+  ansible.builtin.assert:
+    that:
+      - (k3s_worker_inspect.stdout | from_json).default_layout_supported
+      - (k3s_worker_inspect.stdout | from_json).node_password_present
+    fail_msg: >-
+      Configuration worker non standard détectée : utiliser le rapport preflight
+      avant toute migration. Ne pas afficher les fichiers de secrets dans le chat.
+  when: k3s_worker_binary.stat.exists
+
+- name: C13 - Examiner le fichier d'enrôlement géré et le certificat public
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    get_checksum: false
+  loop:
+    - /etc/rancher/k3s/worker-bootstrap-token
+    - /var/lib/rancher/k3s/agent/client-kubelet.crt
+  register: k3s_worker_identity_files
+
+- name: C13 - Déterminer si un nouvel enrôlement est nécessaire
+  ansible.builtin.set_fact:
+    k3s_need_bootstrap: >-
+      {{ not k3s_worker_binary.stat.exists or
+         not k3s_worker_identity_files.results[0].stat.exists or
+         not k3s_worker_identity_files.results[1].stat.exists or
+         (k3s_refresh_bootstrap_token | bool) or
+         (k3s_worker_binary.stat.exists and
+           ((k3s_worker_inspect.stdout | from_json).env_has_literal_token or
+            not (k3s_worker_inspect.stdout | from_json).client_key_present or
+            not (k3s_worker_inspect.stdout | from_json).client_certificate_unexpired)) }}
+    k3s_bootstrap_revoked: false
 
 - name: Récupérer l'IP Tailscale du worker
   ansible.builtin.command: tailscale ip -4
@@ -38,101 +73,218 @@
   ansible.builtin.file:
     path: /etc/rancher/k3s
     state: directory
+    owner: root
+    group: root
     mode: '0755'
 
-- name: Épingler l'agent sur le tailnet (node-ip + flannel-iface)
-  ansible.builtin.copy:
-    dest: /etc/rancher/k3s/config.yaml
-    mode: '0600'
-    content: |
-      node-ip: {{ worker_tailscale_ip.stdout | trim }}
-      flannel-iface: tailscale0
-  register: k3s_worker_config
-
-# -------------------------
-# INSTALLATION K3S (AGENT)
-# -------------------------
-
-- name: Vérifier si k3s est déjà installé
-  ansible.builtin.command: which k3s
-  register: k3s_bin
-  failed_when: false
+- name: C13 - Lire la version du CP pour une installation sans changement de version
+  ansible.builtin.command: /usr/local/bin/k3s --version
+  delegate_to: "{{ groups['k3s_servers'][0] }}"
+  register: k3s_cp_version
   changed_when: false
+  when: not k3s_worker_binary.stat.exists
 
-- name: Télécharger script d'installation k3s
+- name: Télécharger le script d'installation seulement pour une machine neuve
   ansible.builtin.get_url:
     url: https://get.k3s.io
     dest: /tmp/k3s_install.sh
     mode: '0755'
-  when: k3s_bin.rc != 0
+  when: not k3s_worker_binary.stat.exists
 
-- name: "Installation de l'agent k3s (bloc protégé C05)"
+- name: C13 - Convergence des identifiants worker
   block:
-    - name: Installer l'agent k3s (rejoint le control-plane via le tailnet)
-      ansible.builtin.shell: |
-        INSTALL_K3S_EXEC="agent" \
-        K3S_URL="https://{{ k3s_control_plane_ip }}:6443" \
-        K3S_TOKEN="{{ k3s_token }}" \
-        K3S_NODE_NAME="{{ k3s_node_name }}" \
-        sh /tmp/k3s_install.sh
-      args:
-        creates: /usr/local/bin/k3s
+    - name: C13 - Créer un bootstrap temporaire sur le CP sans afficher sa valeur
+      ansible.builtin.command:
+        argv:
+          - /usr/local/bin/k3s
+          - token
+          - create
+          - --kubeconfig
+          - /etc/rancher/k3s/k3s.yaml
+          - --ttl
+          - "{{ k3s_bootstrap_ttl }}"
+          - --description
+          - "maptdp-ansible-{{ k3s_node_name }}"
+      delegate_to: "{{ groups['k3s_servers'][0] }}"
+      register: k3s_bootstrap_created
       no_log: true
+      when: k3s_need_bootstrap | bool
+
+    - name: C13 - Vérifier le format bootstrap sécurisé et retenir son ID public
+      ansible.builtin.assert:
+        that:
+          - k3s_bootstrap_created.stdout | trim is match('^K10[a-f0-9]{64}::[a-z0-9]{6}\.[a-z0-9]{16}$')
+      no_log: true
+      when: k3s_need_bootstrap | bool
+
+    - name: C13 - Déposer uniquement le bootstrap sur le worker
+      ansible.builtin.copy:
+        content: "{{ k3s_bootstrap_created.stdout | trim }}\n"
+        dest: "{{ k3s_worker_token_file }}"
+        owner: root
+        group: root
+        mode: '0600'
+      no_log: true
+      diff: false
+      when: k3s_need_bootstrap | bool
+
+    - name: C13 - Restreindre le fichier d'enrôlement conservé pour le redémarrage
+      ansible.builtin.file:
+        path: "{{ k3s_worker_token_file }}"
+        owner: root
+        group: root
+        mode: '0600'
+
+    - name: C13 - Écrire la configuration réseau et le chemin du bootstrap
+      ansible.builtin.copy:
+        dest: /etc/rancher/k3s/config.yaml
+        owner: root
+        group: root
+        mode: '0600'
+        content: |
+          node-ip: {{ worker_tailscale_ip.stdout | trim }}
+          flannel-iface: tailscale0
+          server: {{ ('https://' ~ k3s_control_plane_ip ~ ':6443') | to_json }}
+          node-name: {{ k3s_node_name | to_json }}
+          token-file: {{ k3s_worker_token_file | to_json }}
+      register: k3s_worker_config
+
+    - name: C13 - Installer un agent neuf sans secret dans la commande ou l'environnement
+      ansible.builtin.command: sh /tmp/k3s_install.sh
+      environment:
+        INSTALL_K3S_EXEC: agent
+        INSTALL_K3S_VERSION: "{{ k3s_cp_version.stdout.split()[2] }}"
+        K3S_URL: "https://{{ k3s_control_plane_ip }}:6443"
+        K3S_NODE_NAME: "{{ k3s_node_name }}"
+        K3S_TOKEN_FILE: "{{ k3s_worker_token_file }}"
+      no_log: true
+      when: not k3s_worker_binary.stat.exists
+
+    - name: C13 - Retirer le token littéral du fichier systemd standard sans copie de sauvegarde
+      ansible.builtin.lineinfile:
+        path: /etc/systemd/system/k3s-agent.service.env
+        regexp: '^K3S_TOKEN='
+        state: absent
+        backup: false
+      no_log: true
+      diff: false
+      register: k3s_removed_literal
+
+    - name: C13 - Converger les références non secrètes du service agent
+      ansible.builtin.lineinfile:
+        path: /etc/systemd/system/k3s-agent.service.env
+        regexp: "^{{ item.key }}="
+        line: "{{ item.key }}='{{ item.value }}'"
+        owner: root
+        group: root
+        mode: '0600'
+      loop:
+        - {key: K3S_TOKEN_FILE, value: "{{ k3s_worker_token_file }}"}
+        - {key: K3S_URL, value: "https://{{ k3s_control_plane_ip }}:6443"}
+        - {key: K3S_NODE_NAME, value: "{{ k3s_node_name }}"}
+      no_log: true
+      diff: false
+      register: k3s_worker_env
+
+    - name: C13 - Appliquer et vérifier une configuration modifiée
+      ansible.builtin.include_tasks: restart_and_verify.yml
+      when: >-
+        k3s_need_bootstrap | bool or k3s_worker_config is changed or
+        k3s_removed_literal is changed or k3s_worker_env is changed
+
+    - name: C13 - Révoquer immédiatement le bootstrap après enrôlement
+      ansible.builtin.command:
+        argv:
+          - /usr/local/bin/k3s
+          - token
+          - delete
+          - --kubeconfig
+          - /etc/rancher/k3s/k3s.yaml
+          - "{{ (k3s_bootstrap_created.stdout | trim).split('::')[-1].split('.')[0] }}"
+      delegate_to: "{{ groups['k3s_servers'][0] }}"
+      no_log: true
+      when: k3s_need_bootstrap | bool
+
+    - name: C13 - Noter la révocation du bootstrap
+      ansible.builtin.set_fact:
+        k3s_bootstrap_revoked: true
+      when: k3s_need_bootstrap | bool
+
+    - name: C13 - Prouver le redémarrage avec certificats après révocation du bootstrap
+      ansible.builtin.include_tasks: restart_and_verify.yml
+      when: k3s_need_bootstrap | bool
+
+    - name: C13 - Vérifier que le service reste actif sur un re-run sans changement
+      ansible.builtin.command: systemctl is-active k3s-agent
+      changed_when: false
+
   rescue:
-    # C05 : l'installeur k3s échoue silencieusement (token en clair dans
-    # la commande). Diagnostic explicite sans divulguer le token.
-    - name: "C05 - Échec de l'installation de l'agent : diagnostic sans divulguer le token"
+    - name: C13 - Arrêter avec un diagnostic sans secrets
       ansible.builtin.fail:
         msg: >-
-          L'installation de l'agent k3s a échoué (sortie masquée car la
-          commande contient le node-token). Causes probables :
-          (1) node-token invalide ou renouvelé → régénérer sur le CP :
-              sudo cat /var/lib/rancher/k3s/server/node-token
-              puis relancer avec -e k3s_token=… ;
-          (2) CP injoignable via le tailnet → tester depuis le worker :
-              curl -k https://{{ k3s_control_plane_ip }}:6443/ping ;
-          (3) script d'installation absent → vérifier /tmp/k3s_install.sh
-              (tâche get_url précédente) ;
-          (4) échec applicatif → consulter sur le worker :
-              journalctl -u k3s-agent --no-pager -n 50.
-          Le token n'est volontairement PAS affiché ici.
+          Migration/enrôlement interrompu. Ne pas coller les fichiers env/token ni les
+          journaux bruts. Vérifier le rapport preflight, la connectivité tailnet et
+          le statut Node/Lease. Si l'identité locale doit être réenrôlée, le paramètre
+          non secret k3s_refresh_bootstrap_token=true permet une nouvelle tentative.
+          Le secret serveur n'a jamais été envoyé au worker par ce rôle.
+  always:
+    - name: C13 - Révoquer aussi le bootstrap en cas d'échec intermédiaire
+      ansible.builtin.command:
+        argv:
+          - /usr/local/bin/k3s
+          - token
+          - delete
+          - --kubeconfig
+          - /etc/rancher/k3s/k3s.yaml
+          - "{{ (k3s_bootstrap_created.stdout | trim).split('::')[-1].split('.')[0] }}"
+      delegate_to: "{{ groups['k3s_servers'][0] }}"
+      register: k3s_cleanup_bootstrap
+      failed_when: false
+      no_log: true
+      when: >-
+        k3s_bootstrap_created is defined and
+        k3s_bootstrap_created.stdout is defined and
+        (k3s_bootstrap_created.stdout | trim is match('^K10[a-f0-9]{64}::[a-z0-9]{6}\.[a-z0-9]{16}$')) and
+        not k3s_bootstrap_revoked
 
-- name: Activer et démarrer l'agent k3s
-  ansible.builtin.systemd:
-    name: k3s-agent
-    state: started
-    enabled: true
+    - name: C13 - Signaler une révocation de secours non confirmée
+      ansible.builtin.debug:
+        msg: "ATTENTION C13 : révocation de secours non confirmée ; le bootstrap reste borné par son TTL."
+      when: k3s_cleanup_bootstrap.rc is defined and k3s_cleanup_bootstrap.rc != 0
 
-# Correctif du 25/10/2026 : sur un re-run (worker déjà enrôlé), la
-# modification de config.yaml ne prend effet qu'après restart de
-# l'agent. Le worker de prod est déjà conforme (appliqué à chaud le
-# 25/10) -> pas de restart lors du prochain run.
-- name: Redémarrer l'agent si la configuration a changé (re-runs)
-  ansible.builtin.systemd:
-    name: k3s-agent
-    state: restarted
-  when: k3s_worker_config is changed
+    - name: C13 - Effacer la valeur temporaire de la variable de résultat
+      ansible.builtin.set_fact:
+        k3s_bootstrap_created: null
+      no_log: true
 
-# -------------------------
-# ATTENTE VUE DU CONTROL-PLANE
-# -------------------------
-
-- name: Attendre que le nœud soit Ready vu du control-plane
-  ansible.builtin.command: >
-    k3s kubectl get node {{ k3s_node_name }}
-    -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}'
-  register: worker_ready
+- name: C13 - Vérifier Ready et lire le label courant
+  ansible.builtin.command:
+    argv:
+      - /usr/local/bin/k3s
+      - kubectl
+      - --kubeconfig
+      - /etc/rancher/k3s/k3s.yaml
+      - --request-timeout=15s
+      - get
+      - node
+      - "{{ k3s_node_name }}"
+      - -o
+      - json
   delegate_to: "{{ groups['k3s_servers'][0] }}"
-  become: true
+  register: k3s_worker_node
   changed_when: false
-  until: worker_ready.stdout == "True"
-  retries: 30
-  delay: 10
+  until: >-
+    k3s_worker_node.rc == 0 and
+    ((k3s_worker_node.stdout | from_json).status.conditions |
+      selectattr('type', 'equalto', 'Ready') | selectattr('status', 'equalto', 'True') | list | length > 0)
+  retries: 24
+  delay: 5
 
-- name: Labeliser le nœud en worker
-  ansible.builtin.command: >
-    k3s kubectl label node {{ k3s_node_name }}
+- name: Labeliser le nœud worker seulement si nécessaire
+  ansible.builtin.command: >-
+    /usr/local/bin/k3s kubectl --kubeconfig /etc/rancher/k3s/k3s.yaml
+    --request-timeout=15s label node {{ k3s_node_name }}
     node-role.kubernetes.io/worker=worker --overwrite
   delegate_to: "{{ groups['k3s_servers'][0] }}"
-  become: true
-  changed_when: false
+  when: >-
+    (k3s_worker_node.stdout | from_json).metadata.labels.get('node-role.kubernetes.io/worker', '') != 'worker'

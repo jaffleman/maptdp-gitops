@@ -1,0 +1,21 @@
+---
+# C13 : lecture seule, jamais de cat de token / systemctl cat dans le chat.
+- name: C13 - Inventaire des identifiants k3s sans divulgation
+  hosts: k3s_servers:k3s_workers
+  gather_facts: false
+  become: true
+  tasks:
+    - name: C13 - Inspecter uniquement les métadonnées et indicateurs
+      ansible.builtin.command:
+        argv:
+          - python3
+          - -c
+          - "{{ lookup('ansible.builtin.file', playbook_dir ~ '/../ops/k3s_token_preflight.py') }}"
+        stdin: "{{ {'mode': ('server' if inventory_hostname in groups['k3s_servers'] else 'worker')} | to_json }}"
+      register: k3s_tokens_preflight
+      changed_when: false
+      check_mode: false
+
+    - name: C13 - Afficher le rapport sans secrets
+      ansible.builtin.debug:
+        msg: "{{ k3s_tokens_preflight.stdout | from_json }}"

@@ -1,0 +1,22 @@
+---
+# C13 : migration d'un worker existant ; aucun rôle runtime/apt/upgrade.
+- name: C13 - Séparer l'identité worker du secret serveur
+  hosts: k3s_workers
+  gather_facts: false
+  become: true
+  serial: 1
+  any_errors_fatal: true
+  tasks:
+    - name: C13 - Exiger un worker déjà installé pour cette migration
+      ansible.builtin.stat:
+        path: /usr/local/bin/k3s
+      register: k3s_existing_agent
+
+    - name: C13 - Réserver ce playbook à la migration
+      ansible.builtin.assert:
+        that: k3s_existing_agent.stat.exists
+        fail_msg: "Machine neuve : utiliser playbooks/k3s_worker.yml après la phase 1."
+
+    - name: C13 - Appliquer le modèle bootstrap temporaire puis certificats
+      ansible.builtin.import_role:
+        name: k3s_worker

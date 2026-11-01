@@ -1,10 +1,9 @@
 # V5 (29/10) — PHASE 2 WORKER : déploiement de l'agent k3s VIA LE TAILNET.
 # Prérequis : PHASE 1 terminée (playbooks/prepare_vps.yml) — VPS durci
 # (sshd 63210, UFW, fail2ban) et enrôlé sur le tailnet.
-# Lancer avec -e ansible_host=<IP Tailscale du worker> (port 63210 par
-# défaut via le template d'inventaire).
-# Extra-vars : -e k3s_token=K10xxxx (node-token du control-plane :
-#   sudo cat /var/lib/rancher/k3s/server/node-token — jamais dans Git).
+# C13 : adresses dans l’inventaire ; aucun token ni ansible_host en extra-vars.
+# Le rôle crée un bootstrap TTL sur le CP, puis le révoque après enrôlement.
+# Ne jamais transférer le token serveur au worker.
 - name: Phase 2 - Déploiement de l'agent k3s (worker, via tailnet)
   hosts: k3s_workers
   become: true
@@ -12,24 +11,18 @@
 
   pre_tasks:
 
-    # -------------------------
-    # C03 (audit du 30/10) : le node-token k3s passé en extra-var est
-    # OBLIGATOIRE — sans lui le rôle k3s_worker échouait à mi-course.
-    # -------------------------
-    - name: "C03 - Vérifier les variables obligatoires (worker)"
+    - name: "C03/C13 - Vérifier les variables non secrètes (worker)"
       ansible.builtin.assert:
         that:
-          - k3s_token is defined
-          - k3s_token | length > 20
+          - k3s_token is not defined
           - k3s_control_plane_ip is defined
           - ansible_host is defined
+          - k3s_node_name is defined
+          - groups['k3s_servers'] | length == 1
         fail_msg: >-
-          Variables manquantes. Lancer avec :
-          -e k3s_token=K10… (node-token du CP : sudo cat
-          /var/lib/rancher/k3s/server/node-token — jamais dans Git)
-          -e ansible_host=<IP Tailscale du worker>.
-          k3s_control_plane_ip doit être à jour dans group_vars/all.yml.
-        success_msg: "C03 - Variables obligatoires présentes."
+          Utiliser l'inventaire à jour, sans k3s_token ni ansible_host en extra-vars.
+          Le bootstrap temporaire est créé sur le CP par le rôle C13.
+        success_msg: "C03/C13 - Paramètres worker présents, aucun token serveur fourni."
 
     - name: Wait for apt lock to be released
       ansible.builtin.shell: |
@@ -68,6 +61,7 @@
     # ⚙️ Pré-requis (aucun port cluster au public)
     - { role: k3s_prereqs, tags: [k3s] }
 
-    # 🧩 Agent k3s (token via --extra-vars) — rejoint le control-plane
+    # 🧩 Agent k3s (bootstrap temporaire C13) — rejoint le control-plane
     # via le tailnet (node-ip + flannel-iface dans config.yaml)
     - { role: k3s_worker, tags: [k3s] }
+
