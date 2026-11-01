@@ -1,0 +1,66 @@
+---
+# Aucun rôle security/UFW de configuration ; uniquement lectures et connexion neuve.
+- name: C14 - Vérifier les paramètres de la posture finale
+  ansible.builtin.assert:
+    that:
+      - ssh_port | int > 0
+      - ssh_port | int < 65536
+      - ssh_port | int != 22
+      - ssh_user is defined
+      - ansible_host is defined
+    fail_msg: "C14 exige l'adresse réelle et le port SSH final, différent de 22."
+
+- name: C14 - Inspecter sshd, les écoutes, systemd et UFW
+  ansible.builtin.command:
+    argv:
+      - python3
+      - -c
+      - "{{ lookup('ansible.builtin.file', playbook_dir ~ '/../ops/ssh_postconditions.py') }}"
+    stdin: "{{ {'mode': 'inspect', 'port': ssh_port | int} | to_json }}"
+  register: ssh_postconditions_local
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: C14 - Afficher les postconditions locales
+  ansible.builtin.debug:
+    msg: "{{ ssh_postconditions_local.stdout | from_json }}"
+
+- name: C14 - Exiger la posture locale complète
+  ansible.builtin.assert:
+    that:
+      - ssh_postconditions_local.rc == 0
+    fail_msg: "Postconditions locales C14 en échec ; consulter failures ci-dessus."
+
+- name: C14 - Vérifier une connexion neuve et sonder la fermeture du port 22
+  ansible.builtin.command:
+    argv:
+      - python3
+      - -c
+      - "{{ lookup('ansible.builtin.file', playbook_dir ~ '/../ops/ssh_postconditions.py') }}"
+    stdin: >-
+      {{ {'mode': 'controller', 'host': hostvars[inventory_hostname].ansible_host,
+          'port': ssh_port | int, 'user': ssh_user,
+          'identity_file': ssh_postconditions_identity_file,
+          'public_addresses': (ssh_postconditions_local.stdout | from_json).public_addresses} | to_json }}
+  delegate_to: localhost
+  become: false
+  vars:
+    ansible_connection: local
+    ansible_become: false
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+  register: ssh_postconditions_network
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: C14 - Afficher les résultats depuis le contrôleur
+  ansible.builtin.debug:
+    msg: "{{ ssh_postconditions_network.stdout | from_json }}"
+
+- name: C14 - Exiger la connexion authentifiée et aucune ouverture du 22
+  ansible.builtin.assert:
+    that:
+      - ssh_postconditions_network.rc == 0
+    fail_msg: "Postconditions réseau C14 en échec ; consulter failures ci-dessus."
+    success_msg: "C14 : aucune écoute 22, configuration persistante conforme et authentification neuve sur le port final."

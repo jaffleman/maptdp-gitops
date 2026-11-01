@@ -1,0 +1,17 @@
+---
+# Utilisable seul et importé après la phase 1 ; aucune remise à zéro UFW/reboot.
+- name: C14 - Vérifier la posture finale SSH des VPS
+  hosts: k3s_nodes
+  gather_facts: false
+  become: true
+  any_errors_fatal: true
+  tags: [ssh_postconditions]
+  vars:
+    # Le bootstrap peut avoir utilisé 22. Ici on force le port final,
+    # sans modifier l'inventaire ni réutiliser la connexion bootstrap.
+    ansible_port: "{{ ssh_port }}"
+  pre_tasks:
+    - name: C14 - Abandonner une éventuelle connexion bootstrap persistante
+      ansible.builtin.meta: reset_connection
+  roles:
+    - role: ssh_postconditions

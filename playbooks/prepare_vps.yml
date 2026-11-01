@@ -1,3 +1,6 @@
+# C14 (01/11) : un second play de postconditions, après les attentes locales,
+# force le port final et renouvelle la connexion ; aucune tâche n'est ajoutée
+# dans l'ancienne session SSH entre fermeture du filet et reboot.
 # V5 (29/10) — PHASE 1 : préparation et durcissement d'un VPS.
 # V5.1 : la finalisation (fermeture 22 + bascule systemd + reboot) est
 #        regroupée dans UNE SEULE tâche atomique fire-and-forget :
@@ -20,7 +23,7 @@
 #        tailscale0:{{ ssh_port }}, elle n'est pas affectée.
 # RÉUTILISABLE pour le control-plane ET le worker (hosts: k3s_nodes).
 # Machine fraîche (SSH 22)      : -e bootstrap_ssh=22 -l <hote>
-#                                -e ansible_host=<IP publique> -e tailscale_auth_key=tskey-…
+#                                -e ansible_host=<IP publique> -e @/chemin/protege/phase1-secrets.yml
 # Machine déjà durcie (63210)  : -e ansible_host=<IP Tailscale> (re-run
 #                                idempotent, pas de reboot)
 # La phase 1 se termine par un reboot FIRE-AND-FORGET : c'est le BOOT
@@ -59,7 +62,8 @@
           - tailscale_auth_key | length > 10
         fail_msg: >-
           Enrôlement d'une machine fraîche (bootstrap_ssh défini) sans
-          tailscale_auth_key : fournir -e tailscale_auth_key=tskey-…
+          tailscale_auth_key : utiliser un fichier de variables protégé,
+          hors Git et hors historique (-e @/chemin/protege/phase1-secrets.yml).
       when: bootstrap_ssh is defined
 
     - name: Définir le hostname du nœud (convention de nommage 27/10)
@@ -224,6 +228,12 @@
         msg: >-
           VPS durci (sshd {{ ssh_port }}, UFW, fail2ban), enrôlé sur le
           tailnet. PHASE 2 : lancer le playbook de déploiement avec
-          -e ansible_host={{ tailscale_ip.stdout | trim }}
-          (connexion via tailnet, port {{ ssh_port }} par défaut).
+          après mise à jour de l'adresse ansible_host dans l'inventaire :
+          {{ tailscale_ip.stdout | trim }}. Ne pas passer ansible_host en
+          extra-vars en phase 2 ; connexion via tailnet, port {{ ssh_port }}.
       delegate_to: localhost
+
+
+# C14 : nouveau play, nouveau port, après fin du reboot éventuel.
+- import_playbook: ssh_postconditions.yml
+
