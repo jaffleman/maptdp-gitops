@@ -12,6 +12,25 @@
 
   pre_tasks:
 
+    # -------------------------
+    # C03 (audit du 30/10) : le node-token k3s passé en extra-var est
+    # OBLIGATOIRE — sans lui le rôle k3s_worker échouait à mi-course.
+    # -------------------------
+    - name: "C03 - Vérifier les variables obligatoires (worker)"
+      ansible.builtin.assert:
+        that:
+          - k3s_token is defined
+          - k3s_token | length > 20
+          - k3s_control_plane_ip is defined
+          - ansible_host is defined
+        fail_msg: >-
+          Variables manquantes. Lancer avec :
+          -e k3s_token=K10… (node-token du CP : sudo cat
+          /var/lib/rancher/k3s/server/node-token — jamais dans Git)
+          -e ansible_host=<IP Tailscale du worker>.
+          k3s_control_plane_ip doit être à jour dans group_vars/all.yml.
+        success_msg: "C03 - Variables obligatoires présentes."
+
     - name: Wait for apt lock to be released
       ansible.builtin.shell: |
         while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; do

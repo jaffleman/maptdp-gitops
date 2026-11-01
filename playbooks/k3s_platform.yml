@@ -20,6 +20,25 @@
 
   pre_tasks:
 
+    # -------------------------
+    # C03 (audit du 30/10) : la phase 2 CP a connu 5 runs avortés,
+    # souvent pour une variable non détectée avant mi-course.
+    # -------------------------
+    - name: "C03 - Vérifier les variables obligatoires (phase 2 CP)"
+      ansible.builtin.assert:
+        that:
+          - ansible_host is defined
+          - ssh_user is defined
+          - kubeconfig_path is defined
+          - k3s_control_plane_ip is defined
+          - vault_addr is defined
+        fail_msg: >-
+          Variables manquantes. Lancer avec -e ansible_host=<IP Tailscale
+          du CP> ; kubeconfig_path/k3s_control_plane_ip/vault_addr doivent
+          être définis dans inventory/group_vars/all.yml (checker le
+          chargement de l'inventaire si l'erreur persiste).
+        success_msg: "C03 - Variables obligatoires présentes."
+
     - name: Wait for apt lock to be released
       ansible.builtin.shell: |
         while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; do

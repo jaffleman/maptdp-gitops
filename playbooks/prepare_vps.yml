@@ -37,6 +37,31 @@
 
   pre_tasks:
 
+    # -------------------------
+    # C03 (audit du 30/10) : échouer VITE et EXPLICITEMENT si une
+    # variable obligatoire manque, plutôt qu'en milieu de run.
+    # -------------------------
+    - name: "C03 - Vérifier les variables obligatoires (phase 1)"
+      ansible.builtin.assert:
+        that:
+          - node_hostname is defined
+          - ssh_port is defined
+          - ansible_host is defined
+        fail_msg: >-
+          Variables manquantes. node_hostname/ansible_host doivent être
+          définis (inventaire ou -e), ssh_port dans group_vars/all.yml.
+        success_msg: "C03 - Variables obligatoires présentes."
+
+    - name: "C03 - Machine fraîche : authkey Tailscale obligatoire"
+      ansible.builtin.assert:
+        that:
+          - tailscale_auth_key is defined
+          - tailscale_auth_key | length > 10
+        fail_msg: >-
+          Enrôlement d'une machine fraîche (bootstrap_ssh défini) sans
+          tailscale_auth_key : fournir -e tailscale_auth_key=tskey-…
+      when: bootstrap_ssh is defined
+
     - name: Définir le hostname du nœud (convention de nommage 27/10)
       ansible.builtin.hostname:
         name: "{{ node_hostname }}"
