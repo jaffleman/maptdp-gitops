@@ -1,8 +1,8 @@
 # C14 — postconditions de la bascule SSH
 
 **Identifiant documentaire :** RUNBOOK-C14-SSH-POSTCONDITIONS
-**Version :** 0.1
-**Statut :** Préparé ; validation terrain en attente
+**Version :** 1.0
+**Statut :** Validé / clos — C14, posture actuelle et contrôles outillés
 **Classification :** Interne
 **Propriétaire :** Sébastien MATHURIN
 **Date :** 01/11/2026
@@ -45,3 +45,12 @@ Ne jamais exécuter le rôle security seul pour vérifier C14 : son reset UFW ef
 ## Validation à consigner
 
 Tests Python positifs/négatifs (écoute 22, allow résiduel, port supplémentaire, socket actif, absence de route et faux succès par connexion persistante). Syntax-checks des deux playbooks, deux passages du checker en lecture seule avec changed=0, recette C11. La future intégration après un nouveau reboot/rebuild reste à vérifier lors du prochain test PRA ; aucun reboot de production n'est requis pour lire les postconditions actuelles.
+
+## Résultats du 01/11/2026 — PREUVE-019
+
+39 tests Python OK sous Ubuntu (dont 11 C14), deux syntax-checks OK. Premier passage corrigé : ok=7 changed=0 unreachable=0 failed=0 sur chaque VPS. Deuxième passage avec -e bootstrap_ssh=22 : même résultat, prouvant la connexion sur le port final malgré la variable de bootstrap. Aucune modification de configuration SSH/UFW et aucun reboot/restart de VPS.
+
+Sur les deux hôtes : ports effectifs et ListenAddress uniquement 63210 ; aucune écoute 22 ; ssh.service active/enabled ; ssh.socket inactive/disabled ; UFW actif, deny entrant et deny 22 IPv4/IPv6, aucun allow/limit explicite 22 ; nouvelle connexion par clé avec host key strictement vérifiée réussie. Probes 22 : refused sur tailnet, timeout sur IPv4 publique, unreachable sur IPv6 publique depuis MSI (limite réseau explicitement signalée). Fermeture IPv6 côté VPS confirmée indépendamment par écoutes/configuration/UFW, pas par une sonde externe IPv6.
+
+Imprévu initial : le parseur n'acceptait pas les commentaires des règles deny du CP, pourtant présentes ; normalisation des commentaires et test représentatif ajoutés au commit 2b19f8d0. Aucun changement de pare-feu nécessaire. Recette C11 après vérification : six contrôles verts, ok=3 changed=0 failed=0. L'exécution du nouveau play automatiquement après un prochain rebuild/reboot de phase 1 restera une validation du prochain PRA, pas une opération effectuée aujourd'hui.
+
