@@ -1,0 +1,32 @@
+---
+# C13 : preuve après rotation serveur, sans distribuer un nouveau bootstrap.
+- name: C13 - Vérifier l'indépendance du worker après rotation serveur
+  hosts: k3s_workers
+  gather_facts: false
+  become: true
+  serial: 1
+  any_errors_fatal: true
+  tasks:
+    - name: C13 - Vérifier que le worker n'utilise plus le secret serveur
+      ansible.builtin.command:
+        argv:
+          - python3
+          - -c
+          - "{{ lookup('ansible.builtin.file', playbook_dir ~ '/../ops/k3s_token_preflight.py') }}"
+        stdin: '{"mode":"worker"}'
+      register: k3s_certificate_preflight
+      changed_when: false
+
+    - name: C13 - Exiger le modèle certificats sans token littéral
+      ansible.builtin.assert:
+        that:
+          - not (k3s_certificate_preflight.stdout | from_json).env_has_literal_token
+          - (k3s_certificate_preflight.stdout | from_json).managed_token_file_selected
+          - (k3s_certificate_preflight.stdout | from_json).worker_credential_kind == 'bootstrap'
+          - (k3s_certificate_preflight.stdout | from_json).client_certificate_unexpired
+          - (k3s_certificate_preflight.stdout | from_json).node_password_present
+
+    - name: C13 - Redémarrer et prouver Ready avec un nouveau Lease
+      ansible.builtin.import_role:
+        name: k3s_worker
+        tasks_from: restart_and_verify
