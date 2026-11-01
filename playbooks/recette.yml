@@ -1,0 +1,56 @@
+---
+# C11 : lecture seule, sans rôle runtime ni accès aux Secrets.
+# Depuis le contrôleur : ansible-playbook -i inventory/hosts.yml playbooks/recette.yml -l vps-ovh1
+- name: C11 - Recette de la plateforme MAPTDP
+  hosts: k3s_servers
+  gather_facts: false
+  become: false
+  vars:
+    recette_expected_nodes: [vps-cp, vps-worker]
+    recette_min_argocd_apps: 23
+    recette_min_vso_secrets: 12
+    recette_namespace: maptdp-staging
+    recette_backup_cronjob: postgres-backup-cronjob
+    recette_backup_max_age_hours: 30
+    recette_timeout_seconds: 20
+    recette_min_app_replicas: 2
+    # Sources : charts/maptdp-{frontend,backend}/values-staging.yaml et probe /healthz.
+    recette_https_checks:
+      - {url: "https://maptdp.jaffleman.tech/", status: 200}
+      - {url: "https://api.jaffleman.tech/healthz", status: 200}
+  tasks:
+    - name: C11 - Collecter et contrôler les états sans modifier le cluster
+      ansible.builtin.command:
+        argv:
+          - python3
+          - -c
+          - "{{ lookup('ansible.builtin.file', playbook_dir ~ '/../ops/recette.py') }}"
+        stdin: >-
+          {{ {'kubeconfig': kubeconfig_path,
+              'expected_nodes': recette_expected_nodes,
+              'min_argocd_apps': recette_min_argocd_apps,
+              'min_vso_secrets': recette_min_vso_secrets,
+              'namespace': recette_namespace,
+              'backup_cronjob': recette_backup_cronjob,
+              'backup_max_age_hours': recette_backup_max_age_hours,
+              'timeout_seconds': recette_timeout_seconds,
+              'min_app_replicas': recette_min_app_replicas,
+              'https_checks': recette_https_checks} | to_json }}
+      register: recette_result
+      changed_when: false
+      failed_when: false
+      # Exécuter également en --check : ce script ne fait que des lectures.
+      check_mode: false
+
+    - name: C11 - Afficher les résultats de recette
+      ansible.builtin.debug:
+        var: recette_result.stdout_lines
+
+    - name: C11 - Exiger la réussite de tous les contrôles
+      ansible.builtin.assert:
+        that:
+          - recette_result.rc | default(1) == 0
+        fail_msg: >-
+          Recette en échec : consulter les lignes ECHEC ci-dessus.
+          Si aucun rapport n'est affiché, vérifier python3, kubectl et le kubeconfig utilisateur.
+        success_msg: "C11 - Recette réussie ; limites : pas de vérification S3 ni de parcours métier."
