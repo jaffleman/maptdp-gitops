@@ -23,9 +23,9 @@
 #        tailscale0:{{ ssh_port }}, elle n'est pas affectée.
 # RÉUTILISABLE pour le control-plane ET le worker (hosts: k3s_nodes).
 # Machine fraîche (SSH 22)      : -e bootstrap_ssh=22 -l <hote>
-#                                -e ansible_host=<IP publique> -e @/chemin/protege/phase1-secrets.yml
-# Machine déjà durcie (63210)  : -e ansible_host=<IP Tailscale> (re-run
-#                                idempotent, pas de reboot)
+#                                -e @/chemin/protege/phase1-secrets.yml
+# Indiquer l’adresse publique dans l’inventaire pour ce seul hôte.
+# Pour un re-run, utiliser son adresse tailnet dans l’inventaire (port 63210).
 # La phase 1 se termine par un reboot FIRE-AND-FORGET : c'est le BOOT
 # qui bascule sshd sur {{ ssh_port }} (config écrite par le rôle
 # security) — aucune reconnexion Ansible n'est tentée après. Les

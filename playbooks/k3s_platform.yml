@@ -4,7 +4,7 @@
   # V5 (29/10) — scission en 2 phases :
   #   PHASE 1 = playbooks/prepare_vps.yml (durcissement + Tailscale,
   #   réutilisable CP/worker). Ce playbook est LA PHASE 2 du CP :
-  #   - connexion VIA LE TAILNET : -e ansible_host=<IP Tailscale du CP>
+  #   - connexion via l’adresse Tailscale du CP dans inventory/hosts.yml
   #     (port 63210 par défaut) ;
   #   - les rôles security et tailscale_ufw ne sont PLUS ici ;
   #   - la bascule kubeconfig 127.0.0.1 -> IP tailnet et la redécouverte
@@ -33,8 +33,8 @@
           - k3s_control_plane_ip is defined
           - vault_addr is defined
         fail_msg: >-
-          Variables manquantes. Lancer avec -e ansible_host=<IP Tailscale
-          du CP> ; kubeconfig_path/k3s_control_plane_ip/vault_addr doivent
+          Vérifier ansible_host sur le CP dans inventory/hosts.yml.
+          ssh_user/kubeconfig_path/k3s_control_plane_ip/vault_addr doivent
           être définis dans inventory/group_vars/all.yml (checker le
           chargement de l'inventaire si l'erreur persiste).
         success_msg: "C03 - Variables obligatoires présentes."
