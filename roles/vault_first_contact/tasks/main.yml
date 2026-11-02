@@ -34,17 +34,11 @@
     - name: "C05 - Échec du login AppRole : diagnostic sans divulguer les identifiants"
       ansible.builtin.fail:
         msg: >-
-          L'authentification AppRole Vault a échoué (sortie masquée car
-          role_id/secret_id sont des secrets). Causes probables :
-          (1) SecretID EXPIRÉ ou déjà consommé (config : TTL 20 min,
-              usage unique) → en générer un nouveau depuis le PC admin :
-              vault write -address={{ vault_addr }} auth/approle/role/ansible-vps/secret-id
-              puis relancer avec -e vault_ansible_secret_id=… ;
-          (2) role_id/secret_id non fournis en extra-vars ;
-          (3) Vault injoignable via le tailnet → tester depuis le PC :
-              curl -s {{ vault_addr }}/v1/sys/health ;
-          (4) role AppRole modifié → vérifier les policies sur ansible-vps.
-          Aucun identifiant n'est affiché volontairement.
+          {% set status = vault_login.status | default(-1) | int %}
+          {% if status <= 0 %}Aucune réponse HTTP exploitable. Vérifier le transport tailnet et la disponibilité de Vault.
+          {% elif status in [400, 403] %}Login refusé par Vault (HTTP {{ status }}). Corréler avec l’audit avant de conclure.
+          {% else %}Réponse HTTP {{ status }} inattendue. Vérifier le montage et la disponibilité du serveur.
+          {% endif %}Voir ops/C04-AppRole.md avant toute nouvelle tentative.
 
 - name: Récupérer le certificat CA depuis le VPS distant
   ansible.builtin.slurp:
