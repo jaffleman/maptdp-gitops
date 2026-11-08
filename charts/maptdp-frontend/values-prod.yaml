@@ -1,0 +1,15 @@
+replicaCount: 2
+ingress:
+  host: maptdp.prod.internal.invalid
+runtimeConfig:
+  apiBaseUrl: http://127.0.0.1:18081
+env:
+- name: PORT
+  value: '80'
+- name: NODE_ENV
+  value: production
+- name: LOG_LEVEL
+  value: info
+frontend:
+  image:
+    tag: staging-sha-1785183276
