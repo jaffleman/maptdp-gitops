@@ -8,7 +8,7 @@ spec:
   method: kubernetes
   mount: kubernetes
   kubernetes:
-    role: db-role
+    role: maptdp-prod-db-reader
     serviceAccount: vso-app-sa
     audiences:
     - vault
