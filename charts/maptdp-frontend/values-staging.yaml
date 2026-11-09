@@ -1,11 +1,11 @@
-replicaCount: 2
+replicaCount: 0
 
 ingress:
-  enabled: false
-  host: "maptdp.jaffleman.tech"
+  enabled: true
+  host: "staging.maptdp.jaffleman.tech"
 
 runtimeConfig:
-  apiBaseUrl: "https://api.jaffleman.tech"
+  apiBaseUrl: "https://api.staging.jaffleman.tech"
 env:
   - name: PORT
     value: "80"

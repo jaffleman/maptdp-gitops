@@ -1,3 +1,4 @@
+replicaCount: 0
 db:
   image:
     tag: "16.21"

@@ -1,3 +1,4 @@
+replicaCount: 1
 # deploy/charts/maptdp-db/values.yaml
 
 postgres:

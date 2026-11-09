@@ -1,8 +1,8 @@
-replicaCount: 2
+replicaCount: 0
 
 ingress:
-  enabled: false
-  host: "api.jaffleman.tech"
+  enabled: true
+  host: "api.staging.jaffleman.tech"
 
 
 env:
