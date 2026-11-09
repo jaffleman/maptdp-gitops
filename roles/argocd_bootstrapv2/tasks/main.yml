@@ -68,3 +68,19 @@
     readiness_timeout: "{{ readiness_argocd_timeout }}"
   tags: [argocd_ready]
 
+- name: Deploy ArgoCD root-app-maptdp-prod.yaml (Bootstrap)
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    state: present
+    definition: "{{ lookup('file', playbook_dir ~ '/../root_app_dir/root-app-maptdp-prod.yaml') | from_yaml }}"
+
+- name: "C10 - Attendre root-app-maptdp-prod Synced et Healthy"
+  ansible.builtin.import_role:
+    name: readiness_wait
+  vars:
+    readiness_kind: application
+    readiness_name: root-app-maptdp-prod
+    readiness_namespace: argocd
+    readiness_kubeconfig: "{{ kubeconfig_path }}"
+    readiness_timeout: "{{ readiness_argocd_timeout }}"
+  tags: [argocd_ready]
