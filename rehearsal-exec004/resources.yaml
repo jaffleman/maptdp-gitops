@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rehearsal-web
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: exec004-rehearsal
+  template:
+    metadata:
+      labels:
+        app: exec004-rehearsal
+    spec:
+      containers:
+      - name: web
+        image: docker.io/jaffleman971/maptdp-frontend:sha-efd02ba
+        ports:
+        - containerPort: 80
+        resources:
+          requests:
+            cpu: 10m
+            memory: 32Mi
+          limits:
+            cpu: 100m
+            memory: 128Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rehearsal-web
+spec:
+  selector:
+    app: exec004-rehearsal
+  ports:
+  - port: 80
+    targetPort: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: rehearsal-web
+spec:
+  ingressClassName: traefik
+  rules:
+  - host: rehearsal-exec004.internal.invalid
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: rehearsal-web
+            port:
+              number: 80
