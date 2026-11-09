@@ -1,0 +1,28 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-backup-scripts
+data:
+  backup.sh: "#!/bin/sh\nset -eu\nwork=\"$(mktemp -d)\"\ntrap 'rm -rf \"$work\"' EXIT\n\
+    for db in maptdpbdd geolockbdd; do\n  pg_dump -h \"$PGHOST\" -p \"$PGPORT\" -U\
+    \ \"$PGUSER\" -Fc --file \"$work/$db.dump\" \"$db\"\n  pg_restore --list \"$work/$db.dump\"\
+    \ > \"$work/$db.list\"\n  pg_restore --file /dev/null \"$work/$db.dump\"\ndone\n\
+    python3 /scripts/upload.py \"$work\"\n"
+  upload.py: "import base64,datetime,hashlib,io,json,os,pathlib,subprocess,sys,tarfile\n\
+    import botocore.session\nwork=pathlib.Path(sys.argv[1])\nexpected={'maptdpbdd':['opts','reglettes','repartiteurs','tdps'],'geolockbdd':['acces','marker']}\n\
+    manifest={'format':1,'created_utc':datetime.datetime.now(datetime.timezone.utc).isoformat(),'databases':{}}\n\
+    for db,tables in expected.items():\n listing=(work/(db+'.list')).read_text()\n\
+    \ for table in tables:\n  assert any(('TABLE DATA public '+table+' ') in line\
+    \ for line in listing.splitlines()),'missing table '+db+'.'+table\n data=(work/(db+'.dump')).read_bytes()\n\
+    \ manifest['databases'][db]={'tables':tables,'bytes':len(data),'sha256':hashlib.sha256(data).hexdigest()}\n\
+    (work/'manifest.json').write_text(json.dumps(manifest,sort_keys=True))\narchive=work/'databases.tar.gz'\n\
+    with tarfile.open(archive,'w:gz') as t:\n for name in ['maptdpbdd.dump','geolockbdd.dump','manifest.json']:\
+    \ t.add(work/name,arcname=name)\ndata=archive.read_bytes()\nkey=os.environ['S3_PREFIX'].strip('/')+'/backup_prod_'+datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%d_%H%M%S')+'.tar.gz'\n\
+    s3=botocore.session.get_session().create_client('s3',region_name=os.environ['AWS_DEFAULT_REGION'])\n\
+    s3.put_object(Bucket=os.environ['S3_BUCKET'],Key=key,Body=data,ContentMD5=base64.b64encode(hashlib.md5(data).digest()).decode(),ServerSideEncryption='AES256')\n\
+    response=s3.get_object(Bucket=os.environ['S3_BUCKET'],Key=key)\nrestored=response['Body'].read()\n\
+    assert hashlib.sha256(restored).digest()==hashlib.sha256(data).digest()\nwith\
+    \ tarfile.open(fileobj=io.BytesIO(restored),mode='r:gz') as t:\n assert set(t.getnames())=={'maptdpbdd.dump','geolockbdd.dump','manifest.json'}\n\
+    \ for db in expected:\n  target=work/(db+'.remote.dump')\n  target.write_bytes(t.extractfile(db+'.dump').read())\n\
+    \  subprocess.run(['pg_restore','--file','/dev/null',str(target)],check=True)\n\
+    print(json.dumps({'key':key,'last_modified':response['LastModified'].isoformat(),'bytes':len(restored),'sha256':hashlib.sha256(restored).hexdigest(),'databases':manifest['databases'],'roundtrip':'VERIFIED'},sort_keys=True),flush=True)\n"
