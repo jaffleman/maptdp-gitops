@@ -1,7 +1,6 @@
 replicaCount: 2
 
 ingress:
-  enabled: false
   host: "maptdp.jaffleman.tech"
 
 runtimeConfig:
