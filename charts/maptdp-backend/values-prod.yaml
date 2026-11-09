@@ -1,6 +1,6 @@
 replicaCount: 1
 ingress:
-  host: api.jaffleman.tech
+  host: api.prod.internal.invalid
 env:
 - name: PORT
   value: '80'

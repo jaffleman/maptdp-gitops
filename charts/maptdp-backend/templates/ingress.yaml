@@ -5,13 +5,8 @@ metadata:
   namespace: {{ .Release.Namespace }}
   annotations:
     kubernetes.io/ingress.class: traefik
-    cert-manager.io/cluster-issuer: letsencrypt
 spec:
   ingressClassName: traefik
-  tls:
-    - hosts:
-        - {{ .Values.ingress.host }}
-      secretName: {{ include "backend.fullname" . }}-tls
   rules:
     - host: {{ .Values.ingress.host }}
       http:
