@@ -1,4 +1,4 @@
-replicaCount: 2
+replicaCount: 1
 ingress:
   host: api.prod.internal.invalid
 env:
@@ -17,4 +17,4 @@ resources:
     memory: 512Mi
 backend:
   image:
-    tag: staging-sha-1784575443
+    tag: sha-bd0cc00
