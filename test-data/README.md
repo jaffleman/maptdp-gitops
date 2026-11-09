@@ -1,0 +1,1 @@
+Jeu fictif idempotent pour staging seulement. B5 doit être validée avant exécution. Exécuter tdp.sql dans maptdpbdd, puis geolock.sql dans geolockbdd avec psql -v ON_ERROR_STOP=1. Les six tables contiennent ensuite exactement une ligne fictive chacune. Les schémas et PVC sont conservés. Aucun code ni adresse réels. Les marqueurs à 0/0 sont fictifs.

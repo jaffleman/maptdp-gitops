@@ -1,0 +1,5 @@
+BEGIN;
+TRUNCATE TABLE acces,marker RESTART IDENTITY CASCADE;
+INSERT INTO marker(id,longitude,latitude,author,adresse,"accesNbr","createdDate") VALUES(1,0,0,'AUTEUR FICTIF','ADRESSE FICTIVE - AUCUN SITE REEL',1,'2000-01-01');
+INSERT INTO acces(id,type,code,mk) VALUES(1,'TYPE FICTIF','FICTIF-NE-PAS-UTILISER',1);
+COMMIT;
