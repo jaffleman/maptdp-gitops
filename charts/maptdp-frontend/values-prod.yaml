@@ -1,8 +1,8 @@
 replicaCount: 1
 ingress:
-  host: maptdp.prod.internal.invalid
+  host: maptdp.jaffleman.tech
 runtimeConfig:
-  apiBaseUrl: http://127.0.0.1:18081
+  apiBaseUrl: https://api.jaffleman.tech
 env:
 - name: PORT
   value: '80'
