@@ -1,6 +1,7 @@
 replicaCount: 2
 
 ingress:
+  enabled: false
   host: "api.jaffleman.tech"
 
 
