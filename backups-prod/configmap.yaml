@@ -3,13 +3,31 @@ kind: ConfigMap
 metadata:
   name: postgres-backup-scripts
 data:
-  backup.sh: "#!/bin/sh\nset -eu\nwork=\"$(mktemp -d)\"\ntrap 'rm -rf \"$work\"' EXIT\n\
-    for db in maptdpbdd geolockbdd; do\n  pg_dump -h \"$PGHOST\" -p \"$PGPORT\" -U\
-    \ \"$PGUSER\" -Fc --file \"$work/$db.dump\" \"$db\"\n  pg_restore --list \"$work/$db.dump\"\
+  backup.sh: "#!/bin/sh\nset -eu\necho BACKUP_START\nwork=\"$(mktemp -d)\"\ntrap 'rm\
+    \ -rf \"$work\"' EXIT\nfor db in maptdpbdd geolockbdd; do\n  echo PG_DUMP_START_$db\n\
+    \  pg_dump -h \"$PGHOST\" -p \"$PGPORT\" -U \"$PGUSER\" -Fc --file \"$work/$db.dump\"\
+    \ \"$db\"\n  echo PG_DUMP_COMPLETE_$db\n  pg_restore --list \"$work/$db.dump\"\
     \ > \"$work/$db.list\"\n  pg_restore --file /dev/null \"$work/$db.dump\"\ndone\n\
-    python3 /scripts/upload.py \"$work\"\n"
+    echo S3_ROUNDTRIP_START\npython3 /scripts/upload.py \"$work\"\n"
   upload.py: "import base64,datetime,hashlib,io,json,os,pathlib,subprocess,sys,tarfile\n\
-    import botocore.session\nwork=pathlib.Path(sys.argv[1])\nexpected={'maptdpbdd':['opts','reglettes','repartiteurs','tdps'],'geolockbdd':['acces','marker']}\n\
+    import hmac,urllib.parse,urllib.request\ndef s3_request(method,key,body=b''):\n\
+    \ region=os.environ['AWS_DEFAULT_REGION']\n host=os.environ['S3_BUCKET']+'.s3.'+region+'.amazonaws.com'\n\
+    \ now=datetime.datetime.now(datetime.timezone.utc)\n amzdate=now.strftime('%Y%m%dT%H%M%SZ')\n\
+    \ datestamp=now.strftime('%Y%m%d')\n payloadhash=hashlib.sha256(body).hexdigest()\n\
+    \ headers={'host':host,'x-amz-content-sha256':payloadhash,'x-amz-date':amzdate}\n\
+    \ if method=='PUT':headers['x-amz-server-side-encryption']='AES256'\n if os.environ.get('AWS_SESSION_TOKEN'):headers['x-amz-security-token']=os.environ['AWS_SESSION_TOKEN']\n\
+    \ uri='/'+urllib.parse.quote(key,safe='/~')\n names=sorted(headers)\n canonicalheaders=''.join(name+':'+headers[name].strip()+'\\\
+    n' for name in names)\n signedheaders=';'.join(names)\n canonical='\\n'.join([method,uri,'',canonicalheaders,signedheaders,payloadhash])\n\
+    \ scope=datestamp+'/'+region+'/s3/aws4_request'\n stringtosign='AWS4-HMAC-SHA256\\\
+    n'+amzdate+'\\n'+scope+'\\n'+hashlib.sha256(canonical.encode()).hexdigest()\n\
+    \ def mac(key,message):return hmac.new(key,message.encode(),hashlib.sha256).digest()\n\
+    \ signingkey=mac(mac(mac(mac(('AWS4'+os.environ['AWS_SECRET_ACCESS_KEY']).encode(),datestamp),region),'s3'),'aws4_request')\n\
+    \ signature=hmac.new(signingkey,stringtosign.encode(),hashlib.sha256).hexdigest()\n\
+    \ headers['Authorization']='AWS4-HMAC-SHA256 Credential='+os.environ['AWS_ACCESS_KEY_ID']+'/'+scope+',\
+    \ SignedHeaders='+signedheaders+', Signature='+signature\n request=urllib.request.Request('https://'+host+uri,data=body\
+    \ if method=='PUT' else None,headers=headers,method=method)\n with urllib.request.urlopen(request,timeout=60)\
+    \ as response:\n  return response.read(),dict(response.headers)\n\nwork=pathlib.Path(sys.argv[1])\n\
+    expected={'maptdpbdd':['opts','reglettes','repartiteurs','tdps'],'geolockbdd':['acces','marker']}\n\
     manifest={'format':1,'created_utc':datetime.datetime.now(datetime.timezone.utc).isoformat(),'databases':{}}\n\
     for db,tables in expected.items():\n listing=(work/(db+'.list')).read_text()\n\
     \ for table in tables:\n  assert any(('TABLE DATA public '+table+' ') in line\
@@ -18,11 +36,9 @@ data:
     (work/'manifest.json').write_text(json.dumps(manifest,sort_keys=True))\narchive=work/'databases.tar.gz'\n\
     with tarfile.open(archive,'w:gz') as t:\n for name in ['maptdpbdd.dump','geolockbdd.dump','manifest.json']:\
     \ t.add(work/name,arcname=name)\ndata=archive.read_bytes()\nkey=os.environ['S3_PREFIX'].strip('/')+'/backup_prod_'+datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%d_%H%M%S')+'.tar.gz'\n\
-    s3=botocore.session.get_session().create_client('s3',region_name=os.environ['AWS_DEFAULT_REGION'])\n\
-    s3.put_object(Bucket=os.environ['S3_BUCKET'],Key=key,Body=data,ContentMD5=base64.b64encode(hashlib.md5(data).digest()).decode(),ServerSideEncryption='AES256')\n\
-    response=s3.get_object(Bucket=os.environ['S3_BUCKET'],Key=key)\nrestored=response['Body'].read()\n\
+    s3_request('PUT',key,data)\nrestored,response_headers=s3_request('GET',key)\n\
     assert hashlib.sha256(restored).digest()==hashlib.sha256(data).digest()\nwith\
     \ tarfile.open(fileobj=io.BytesIO(restored),mode='r:gz') as t:\n assert set(t.getnames())=={'maptdpbdd.dump','geolockbdd.dump','manifest.json'}\n\
     \ for db in expected:\n  target=work/(db+'.remote.dump')\n  target.write_bytes(t.extractfile(db+'.dump').read())\n\
     \  subprocess.run(['pg_restore','--file','/dev/null',str(target)],check=True)\n\
-    print(json.dumps({'key':key,'last_modified':response['LastModified'].isoformat(),'bytes':len(restored),'sha256':hashlib.sha256(restored).hexdigest(),'databases':manifest['databases'],'roundtrip':'VERIFIED'},sort_keys=True),flush=True)\n"
+    print(json.dumps({'key':key,'last_modified':response_headers.get('Last-Modified'),'bytes':len(restored),'sha256':hashlib.sha256(restored).hexdigest(),'databases':manifest['databases'],'roundtrip':'VERIFIED'},sort_keys=True),flush=True)\n"
