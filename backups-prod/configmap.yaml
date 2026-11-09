@@ -3,12 +3,16 @@ kind: ConfigMap
 metadata:
   name: postgres-backup-scripts
 data:
-  backup.sh: "#!/bin/sh\nset -eu\necho BACKUP_START\nwork=\"$(mktemp -d)\"\ntrap 'rm\
-    \ -rf \"$work\"' EXIT\nfor db in maptdpbdd geolockbdd; do\n  echo PG_DUMP_START_$db\n\
-    \  pg_dump -h \"$PGHOST\" -p \"$PGPORT\" -U \"$PGUSER\" -Fc --file \"$work/$db.dump\"\
-    \ \"$db\"\n  echo PG_DUMP_COMPLETE_$db\n  pg_restore --list \"$work/$db.dump\"\
-    \ > \"$work/$db.list\"\n  pg_restore --file /dev/null \"$work/$db.dump\"\ndone\n\
-    echo S3_ROUNDTRIP_START\npython3 /scripts/upload.py \"$work\"\n"
+  backup.sh: "#!/bin/sh\nset -eu\necho BACKUP_START\necho WAIT_POSTGRES\nattempt=0\n\
+    until pg_isready -h \"$PGHOST\" -p \"$PGPORT\" -U \"$PGUSER\" >/dev/null 2>&1;\
+    \ do\n  attempt=$((attempt + 1))\n  if [ \"$attempt\" -ge 30 ]; then\n    echo\
+    \ POSTGRES_NOT_READY_AFTER_60_SECONDS\n    exit 1\n  fi\n  sleep 2\ndone\necho\
+    \ POSTGRES_READY\n\nwork=\"$(mktemp -d)\"\ntrap 'rm -rf \"$work\"' EXIT\nfor db\
+    \ in maptdpbdd geolockbdd; do\n  echo PG_DUMP_START_$db\n  pg_dump -h \"$PGHOST\"\
+    \ -p \"$PGPORT\" -U \"$PGUSER\" -Fc --file \"$work/$db.dump\" \"$db\"\n  echo\
+    \ PG_DUMP_COMPLETE_$db\n  pg_restore --list \"$work/$db.dump\" > \"$work/$db.list\"\
+    \n  pg_restore --file /dev/null \"$work/$db.dump\"\ndone\necho S3_ROUNDTRIP_START\n\
+    python3 /scripts/upload.py \"$work\"\n"
   upload.py: "import base64,datetime,hashlib,io,json,os,pathlib,subprocess,sys,tarfile\n\
     import hmac,urllib.parse,urllib.request\ndef s3_request(method,key,body=b''):\n\
     \ region=os.environ['AWS_DEFAULT_REGION']\n host=os.environ['S3_BUCKET']+'.s3.'+region+'.amazonaws.com'\n\
