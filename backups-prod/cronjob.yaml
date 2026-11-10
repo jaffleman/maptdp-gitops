@@ -41,27 +41,27 @@ spec:
             - name: AWS_ACCESS_KEY_ID
               valueFrom:
                 secretKeyRef:
-                  name: postgres-s3-auth
+                  name: postgres-s3-auth-vso
                   key: access_key
             - name: AWS_SECRET_ACCESS_KEY
               valueFrom:
                 secretKeyRef:
-                  name: postgres-s3-auth
+                  name: postgres-s3-auth-vso
                   key: secret_key
             - name: AWS_DEFAULT_REGION
               valueFrom:
                 secretKeyRef:
-                  name: postgres-s3-auth
+                  name: postgres-s3-auth-vso
                   key: region
             - name: S3_BUCKET
               valueFrom:
                 secretKeyRef:
-                  name: postgres-s3-auth
+                  name: postgres-s3-auth-vso
                   key: bucket
             - name: S3_PREFIX
               valueFrom:
                 secretKeyRef:
-                  name: postgres-s3-auth
+                  name: postgres-s3-auth-vso
                   key: prefix
             volumeMounts:
             - name: scripts
