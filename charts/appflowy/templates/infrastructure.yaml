@@ -1,0 +1,404 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: appflowy-postgresql
+spec:
+  selector:
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/instance: {{ .Release.Name | quote }}
+  ports:
+  - name: tcp
+    port: 5432
+    targetPort: 5432
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: appflowy-postgresql
+spec:
+  replicas: 1
+  serviceName: appflowy-postgresql
+  selector:
+    matchLabels: &id001
+      app.kubernetes.io/name: postgresql
+      app.kubernetes.io/instance: {{ .Release.Name | quote }}
+  persistentVolumeClaimRetentionPolicy:
+    whenDeleted: Retain
+    whenScaled: Retain
+  template:
+    metadata:
+      labels: *id001
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+      containers:
+      - name: postgresql
+        image: {{ .Values.infrastructure.postgresImage }}
+        ports:
+        - containerPort: 5432
+          name: tcp
+        volumeMounts:
+        - name: data
+          mountPath: /var/lib/postgresql/data
+        - name: initdb
+          mountPath: /docker-entrypoint-initdb.d
+          readOnly: true
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 1000m
+            memory: 1Gi
+        env:
+        - name: POSTGRES_USER
+          value: postgres
+        - name: POSTGRES_DB
+          value: postgres
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.credentials.secretName }}
+              key: postgres-password
+        - name: PGDATA
+          value: /var/lib/postgresql/data/pgdata
+        readinessProbe:
+          exec: &id002
+            command:
+            - sh
+            - -ec
+            - pg_isready -h 127.0.0.1 -U postgres -d postgres
+          periodSeconds: 5
+          timeoutSeconds: 3
+        livenessProbe:
+          exec: *id002
+          periodSeconds: 5
+          timeoutSeconds: 3
+          initialDelaySeconds: 30
+        startupProbe:
+          exec: *id002
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 60
+      volumes:
+      - name: initdb
+        configMap:
+          name: appflowy-postgres-init
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      {{- if .Values.infrastructure.storageClass }}
+      storageClassName: {{ .Values.infrastructure.storageClass | quote }}
+      {{- end }}
+      resources:
+        requests:
+          storage: {{ .Values.infrastructure.postgresSize }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: appflowy-redis
+spec:
+  selector:
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/instance: {{ .Release.Name | quote }}
+  ports:
+  - name: tcp
+    port: 6379
+    targetPort: 6379
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: appflowy-redis
+spec:
+  replicas: 1
+  serviceName: appflowy-redis
+  selector:
+    matchLabels: &id001
+      app.kubernetes.io/name: redis
+      app.kubernetes.io/instance: {{ .Release.Name | quote }}
+  persistentVolumeClaimRetentionPolicy:
+    whenDeleted: Retain
+    whenScaled: Retain
+  template:
+    metadata:
+      labels: *id001
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+      containers:
+      - name: redis
+        image: {{ .Values.infrastructure.redisImage }}
+        ports:
+        - containerPort: 6379
+          name: tcp
+        volumeMounts:
+        - name: data
+          mountPath: /data
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 1000m
+            memory: 1Gi
+        env:
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.credentials.secretName }}
+              key: redis-password
+        command:
+        - sh
+        - -ec
+        - exec redis-server --appendonly yes --requirepass "$REDIS_PASSWORD"
+        readinessProbe:
+          exec: &id002
+            command:
+            - sh
+            - -ec
+            - REDISCLI_AUTH="$REDIS_PASSWORD" redis-cli ping | grep -q PONG
+          periodSeconds: 5
+          timeoutSeconds: 3
+        livenessProbe:
+          exec: *id002
+          periodSeconds: 5
+          timeoutSeconds: 3
+          initialDelaySeconds: 30
+        startupProbe:
+          exec: *id002
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 60
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      {{- if .Values.infrastructure.storageClass }}
+      storageClassName: {{ .Values.infrastructure.storageClass | quote }}
+      {{- end }}
+      resources:
+        requests:
+          storage: {{ .Values.infrastructure.redisSize }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: appflowy-minio
+spec:
+  selector:
+    app.kubernetes.io/name: minio
+    app.kubernetes.io/instance: {{ .Release.Name | quote }}
+  ports:
+  - name: tcp
+    port: 9000
+    targetPort: 9000
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: appflowy-minio
+spec:
+  replicas: 1
+  serviceName: appflowy-minio
+  selector:
+    matchLabels: &id001
+      app.kubernetes.io/name: minio
+      app.kubernetes.io/instance: {{ .Release.Name | quote }}
+  persistentVolumeClaimRetentionPolicy:
+    whenDeleted: Retain
+    whenScaled: Retain
+  template:
+    metadata:
+      labels: *id001
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      containers:
+      - name: minio
+        image: {{ .Values.infrastructure.minioImage }}
+        ports:
+        - containerPort: 9000
+          name: tcp
+        volumeMounts:
+        - name: data
+          mountPath: /data
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 1000m
+            memory: 1Gi
+        env:
+        - name: MINIO_ROOT_USER
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.credentials.secretName }}
+              key: root-user
+        - name: MINIO_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.credentials.secretName }}
+              key: root-password
+        args:
+        - server
+        - /data
+        - --console-address
+        - :9001
+        readinessProbe:
+          httpGet: &id002
+            path: /minio/health/live
+            port: 9000
+          periodSeconds: 10
+          timeoutSeconds: 3
+        livenessProbe:
+          httpGet: *id002
+          periodSeconds: 10
+          timeoutSeconds: 3
+          initialDelaySeconds: 30
+        startupProbe:
+          httpGet: *id002
+          periodSeconds: 10
+          timeoutSeconds: 3
+          failureThreshold: 60
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      {{- if .Values.infrastructure.storageClass }}
+      storageClassName: {{ .Values.infrastructure.storageClass | quote }}
+      {{- end }}
+      resources:
+        requests:
+          storage: {{ .Values.infrastructure.minioSize }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: appflowy-postgres-init
+data:
+  00-extensions.sql: 'CREATE EXTENSION IF NOT EXISTS vector;
+
+    CREATE EXTENSION IF NOT EXISTS pg_trgm;
+
+    '
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: appflowy-gateway
+data:
+  nginx.conf: |
+{{ .Files.Get "files/nginx.conf" | indent 4 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: appflowy-gateway
+spec:
+  selector:
+    app.kubernetes.io/name: appflowy-gateway
+    app.kubernetes.io/instance: {{ .Release.Name | quote }}
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: appflowy-gateway
+spec:
+  replicas: 1
+  selector:
+    matchLabels: &id001
+      app.kubernetes.io/name: appflowy-gateway
+      app.kubernetes.io/instance: {{ .Release.Name | quote }}
+  template:
+    metadata:
+      labels: *id001
+      annotations:
+        checksum/config: {{ .Files.Get "files/nginx.conf" | sha256sum }}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 101
+        runAsGroup: 101
+      containers:
+      - name: gateway
+        image: {{ .Values.infrastructure.gatewayImage }}
+        command:
+        - nginx
+        - -g
+        - daemon off;
+        ports:
+        - containerPort: 8080
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        readinessProbe: &id002
+          httpGet:
+            path: /healthz
+            port: 8080
+          periodSeconds: 5
+        livenessProbe: *id002
+        resources:
+          requests:
+            cpu: 25m
+            memory: 32Mi
+          limits:
+            cpu: 300m
+            memory: 128Mi
+        volumeMounts:
+        - name: config
+          mountPath: /etc/nginx/nginx.conf
+          subPath: nginx.conf
+          readOnly: true
+        - name: tmp
+          mountPath: /tmp
+      volumes:
+      - name: config
+        configMap:
+          name: appflowy-gateway
+      - name: tmp
+        emptyDir: {}

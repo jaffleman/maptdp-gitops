@@ -1,0 +1,5 @@
+# Deployment profile consumed by Argo CD. Shared configuration is in values.yaml.
+global:
+  domain: appflowy-preprod.jaffleman.tech
+  s3:
+    presignedUrlEndpoint: https://appflowy-preprod.jaffleman.tech/minio-api

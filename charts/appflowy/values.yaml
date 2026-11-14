@@ -1,0 +1,542 @@
+global:
+  domain: appflowy-preprod.jaffleman.tech
+  scheme: https
+  wsScheme: wss
+  imageRegistry: ''
+  imagePullSecrets: []
+  labels: {}
+  annotations: {}
+  postgresql:
+    host: appflowy-postgresql
+    port: 5432
+    database: postgres
+    username: postgres
+    password: ''
+    existingSecret: appflowy-credentials
+    secretKeys:
+      password: postgres-password
+  redis:
+    host: appflowy-redis
+    port: 6379
+    password: ''
+    existingSecret: appflowy-credentials
+    secretKeys:
+      password: redis-password
+  s3:
+    useMinio: true
+    endpoint: appflowy-minio
+    port: 9000
+    bucket: appflowy
+    region: us-east-1
+    createBucket: true
+    accessKey: ''
+    secretKey: ''
+    existingSecret: appflowy-credentials
+    secretKeys:
+      accessKey: root-user
+      secretKey: root-password
+    presignedUrlEndpoint: https://appflowy-preprod.jaffleman.tech/minio-api
+  jwt:
+    secret: ''
+    existingSecret: appflowy-credentials
+    secretKey: jwt-secret
+    expiration: 604800
+postgresql:
+  enabled: false
+  image:
+    registry: docker.io
+    repository: pgvector/pgvector
+    tag: pg16
+    digest: sha256:0dd3149a06e4579a0d70d8fef9945636cd514005e7237deb27f9b67886f8dc4f
+  auth:
+    postgresPassword: ''
+    database: postgres
+  primary:
+    podSecurityContext:
+      fsGroup: 999
+    containerSecurityContext:
+      runAsUser: 999
+      runAsGroup: 999
+      readOnlyRootFilesystem: false
+    extraEnvVars:
+    - name: POSTGRES_DB
+      value: '{{ .Values.auth.database }}'
+    customLivenessProbe:
+      exec:
+        command:
+        - sh
+        - -ec
+        - pg_isready -h 127.0.0.1 -U "${POSTGRES_USER:-postgres}" -d "$POSTGRES_DB"
+      initialDelaySeconds: 30
+      periodSeconds: 10
+      timeoutSeconds: 5
+    customReadinessProbe:
+      exec:
+        command:
+        - sh
+        - -ec
+        - pg_isready -h 127.0.0.1 -U "${POSTGRES_USER:-postgres}" -d "$POSTGRES_DB"
+      periodSeconds: 5
+      timeoutSeconds: 5
+    persistence:
+      enabled: true
+      size: 20Gi
+      storageClass: ''
+    resources:
+      requests:
+        memory: 256Mi
+        cpu: 100m
+      limits:
+        memory: 1Gi
+        cpu: 500m
+    initdb:
+      scripts:
+        init-extensions.sql: 'CREATE EXTENSION IF NOT EXISTS vector;
+
+          CREATE EXTENSION IF NOT EXISTS pg_trgm;
+
+          '
+redis:
+  enabled: false
+  image:
+    tag: latest
+  architecture: standalone
+  auth:
+    enabled: false
+  master:
+    persistence:
+      enabled: true
+      size: 8Gi
+      storageClass: ''
+    resources:
+      requests:
+        memory: 128Mi
+        cpu: 50m
+      limits:
+        memory: 256Mi
+        cpu: 200m
+minio:
+  enabled: false
+  image:
+    repository: appflowyinc/minio
+    tag: RELEASE.2025-09-07T16-13-09Z
+  command:
+  - minio
+  args:
+  - server
+  - /bitnami/minio/data
+  - --console-address
+  - :9001
+  auth:
+    rootUser: ''
+    rootPassword: ''
+  defaultBuckets: appflowy
+  persistence:
+    enabled: true
+    size: 50Gi
+    storageClass: ''
+  resources:
+    requests:
+      memory: 256Mi
+      cpu: 100m
+    limits:
+      memory: 512Mi
+      cpu: 500m
+  service:
+    type: ClusterIP
+    ports:
+      api: 9000
+      console: 9001
+kube-prometheus-stack:
+  enabled: false
+gotrue:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: appflowyinc/gotrue
+    tag: latest
+    pullPolicy: IfNotPresent
+    digest: sha256:93a657d44bc886899a0bd09e693e423c7be232c76315e4467d88bd86095297d5
+  service:
+    type: ClusterIP
+    port: 9999
+  resources:
+    requests:
+      memory: 128Mi
+      cpu: 100m
+    limits:
+      memory: 512Mi
+      cpu: 500m
+  config:
+    adminEmail: admin@appflowy.local
+    adminPassword: ''
+    jwtExp: 604800
+    disableSignup: true
+    mailerAutoconfirm: true
+    rateLimitEmailSent: 100
+    smtp:
+      enabled: false
+      host: ''
+      port: 465
+      user: ''
+      password: ''
+      adminEmail: ''
+    oauth:
+      google:
+        enabled: false
+        clientId: ''
+        secret: ''
+      github:
+        enabled: false
+        clientId: ''
+        secret: ''
+      discord:
+        enabled: false
+        clientId: ''
+        secret: ''
+      apple:
+        enabled: false
+        clientId: ''
+        secret: ''
+    saml:
+      enabled: false
+      privateKey: ''
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 80
+  podAnnotations: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+appflowy-backup:
+  enabled: false
+  image:
+    repository: appflowyinc/appflowy_backup
+    tag: 0.21.4
+    digest: sha256:3354cf9d8278ca791dbde204d33c371ad2c76caf94061b1bf2c51602492f66f8
+    pullPolicy: IfNotPresent
+  nodeName: ''
+  apiServerCIDR: ''
+  persistence:
+    size: 50Gi
+    storageClass: ''
+    existingClaim: ''
+  artifacts:
+    bucket: ''
+    prefix: server-backups/
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: '2'
+      memory: 2Gi
+  tolerations: []
+appflowy-cloud:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: appflowyinc/appflowy_cloud
+    tag: 0.21.4
+    digest: sha256:ad9fc55d4595221d8251f69e441232556192d5d298b62ed3a644f98a455ed927
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 8000
+  resources:
+    requests:
+      memory: 256Mi
+      cpu: 200m
+    limits:
+      memory: 1Gi
+      cpu: 1000m
+  config:
+    rustLog: info
+    environment: production
+    accessControl: true
+    websocketMailboxSize: 6000
+    databaseMaxConnections: 40
+    collaborateMultiThread: false
+    collaborateRemoveBatchSize: 100
+    spamDetectEnabled: true
+    fileAuthEnabled: true
+    searchRequestTimeoutSecs: 10
+    signupWhitelistEnabled: false
+    guestInvitesRequireAdminApproval: false
+    mailer:
+      enabled: false
+      host: ''
+      port: 465
+      username: ''
+      email: ''
+      password: ''
+      tlsKind: wrapper
+  metrics:
+    enabled: false
+    path: /metrics
+    portName: http
+    serviceAnnotations: {}
+    serviceMonitor:
+      enabled: false
+      interval: 30s
+      scrapeTimeout: 10s
+      labels: {}
+      namespace: ''
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+  podDisruptionBudget:
+    enabled: false
+    minAvailable: 1
+  podAnnotations: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+appflowy-worker:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: appflowyinc/appflowy_worker
+    tag: 0.21.4
+    digest: sha256:eaaa30a24c5a0ab00f7b7fe0eb39294263e76ddc42415f345a26b71e3a6096a1
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 4001
+  resources:
+    requests:
+      memory: 256Mi
+      cpu: 100m
+    limits:
+      memory: 512Mi
+      cpu: 500m
+  config:
+    rustLog: info
+    environment: production
+    importTickInterval: 30
+  metrics:
+    enabled: false
+    path: /metrics
+    portName: http
+    serviceAnnotations: {}
+    serviceMonitor:
+      enabled: false
+      interval: 30s
+      scrapeTimeout: 10s
+      labels: {}
+      namespace: ''
+  podAnnotations: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+appflowy-search:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: appflowyinc/appflowy_search
+    tag: 0.21.4
+    digest: sha256:3787afbae5f98172d0221bc76e1cdff2e6ede66aebb6224211a3b3339c46499d
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 4002
+  resources:
+    requests:
+      memory: 128Mi
+      cpu: 100m
+    limits:
+      memory: 512Mi
+      cpu: 500m
+  persistence:
+    enabled: true
+    size: 5Gi
+    storageClass: ''
+  config:
+    rustLog: info
+    backgroundIndexerEnabled: false
+    keywordSearchEnabled: true
+    keywordWorkerEnabled: true
+    keywordIndexMapSizeBytes: 2147483648
+  podAnnotations: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+appflowy-web:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: appflowyinc/appflowy_web
+    tag: 0.20.12
+    digest: sha256:f439f4495b7ce8cf5e3f1157bb88ef312c3b09c3ce37d2bdb91bfbd64958d841
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 80
+  podSecurityContext:
+    runAsNonRoot: false
+    runAsUser: 0
+    runAsGroup: 0
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: false
+    capabilities:
+      drop:
+      - ALL
+      add:
+      - CHOWN
+      - SETGID
+      - SETUID
+      - NET_BIND_SERVICE
+      - DAC_OVERRIDE
+  livenessProbe: true
+  readinessProbe: true
+  resources:
+    requests:
+      memory: 128Mi
+      cpu: 50m
+    limits:
+      memory: 256Mi
+      cpu: 200m
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 80
+  podAnnotations: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+admin-frontend:
+  enabled: true
+  replicaCount: 1
+  podSecurityContext:
+    runAsNonRoot: false
+    runAsUser: 0
+    runAsGroup: 0
+  image:
+    repository: appflowyinc/admin_frontend
+    tag: 0.20.2
+    digest: sha256:3a87584bd5f16d9c397c146c3b6d71b53324cd7f26453465bdce087d53288348
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 3000
+  resources:
+    requests:
+      memory: 128Mi
+      cpu: 50m
+    limits:
+      memory: 256Mi
+      cpu: 200m
+  config:
+    pathPrefix: /console
+    oauth:
+      clientId: appflowy_cloud
+      clientSecret: ''
+      allowableRedirectUris: ''
+  podAnnotations: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+appflowy-ai:
+  enabled: false
+  replicaCount: 1
+  image:
+    repository: appflowyinc/appflowy_ai
+    tag: 0.21.4
+    digest: sha256:86f839e7f77a0d3424fa5f54ff48225fc09c7ad3d105b5130fe269d3c05891aa
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 5001
+  resources:
+    requests:
+      memory: 256Mi
+      cpu: 100m
+    limits:
+      memory: 1Gi
+      cpu: 1000m
+  config:
+    defaultModel: gpt-4.1-mini
+    defaultCompletionModel: gpt-4.1-mini
+  secrets:
+    openaiApiKey: ''
+    anthropicApiKey: ''
+    deepseekApiKey: ''
+    deepseekApiBase: ''
+    azureOpenaiApiKey: ''
+    azureOpenaiEndpoint: ''
+    azureOpenaiApiVersion: ''
+  metrics:
+    enabled: false
+    path: /metrics
+    portName: http
+    serviceAnnotations: {}
+    serviceMonitor:
+      enabled: false
+      interval: 30s
+      scrapeTimeout: 10s
+      labels: {}
+      namespace: ''
+  podAnnotations: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+ingress:
+  enabled: false
+  className: traefik
+  certManager:
+    enabled: true
+    issuerKind: ClusterIssuer
+    issuerName: letsencrypt
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: 100m
+    nginx.ingress.kubernetes.io/proxy-read-timeout: '3600'
+    nginx.ingress.kubernetes.io/proxy-send-timeout: '3600'
+    nginx.ingress.kubernetes.io/proxy-http-version: '1.1'
+    nginx.ingress.kubernetes.io/upstream-hash-by: $remote_addr
+  scim:
+    enabled: false
+  tls:
+    enabled: true
+    secretName: appflowy-tls
+  extraHosts: []
+networkPolicy:
+  enabled: false
+  ingressControllerNamespace: ingress-nginx
+serviceAccount:
+  create: true
+  name: ''
+  annotations: {}
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: false
+  capabilities:
+    drop:
+    - ALL
+fullnameOverride: appflowy
+credentials:
+  secretName: appflowy-credentials
+  bootstrapImage: python:3.12-alpine@sha256:c5ba3deef00c7758561a0f03c26f44f10589263d40e732b8748e0d1f38f6dd89
+  adminEmail: admin@appflowy.local
+infrastructure:
+  postgresImage: pgvector/pgvector:pg16@sha256:0dd3149a06e4579a0d70d8fef9945636cd514005e7237deb27f9b67886f8dc4f
+  redisImage: redis:7.4-alpine@sha256:7f7d30b7fdd09467bac58198a1f166dd69789d348d4fe859cccb20e0cf287fbe
+  minioImage: appflowyinc/minio:RELEASE.2025-09-07T16-13-09Z@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
+  gatewayImage: nginx:1.28-alpine@sha256:a8b39bd9cf0f83869a2162827a0caf6137ddf759d50a171451b335cecc87d236
+  storageClass: ''
+  postgresSize: 20Gi
+  redisSize: 2Gi
+  minioSize: 20Gi
+  ingressNamespaces:
+  - kube-system
+  - traefik

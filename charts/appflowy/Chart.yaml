@@ -1,0 +1,18 @@
+apiVersion: v2
+name: appflowy-cloud
+description: AppFlowy Cloud - Self-hosted collaborative workspace platform
+type: application
+version: 1.0.0-jaffleman.1
+appVersion: 0.21.4
+home: https://appflowy.io
+sources:
+- https://github.com/AppFlowy-IO/AppFlowy-SelfHost-Commercial/tree/e39869a2bae964e951832e577407e35a548b48c8/helm/appflowy-cloud
+maintainers:
+- name: AppFlowy Team
+  url: https://github.com/AppFlowy-IO
+keywords:
+- appflowy
+- collaboration
+- workspace
+- notes
+- productivity
